@@ -1,0 +1,30 @@
+plugins {
+    id 'java'
+}
+
+group = 'remix'
+version = '1.7.1'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(8)
+    }
+}
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['-proc:none']
+    options.fork = true
+    options.forkOptions.memoryMaximumSize = '2g'
+}
+
+tasks.named('jar') {
+    archiveFileName = 'Remix-1.7.1.jar'
+    manifest {
+        attributes('Main-Class': 'net.minecraft.client.main.Main')
+    }
+}
