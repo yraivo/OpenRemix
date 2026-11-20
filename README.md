@@ -11,11 +11,10 @@
 [![Sources](https://img.shields.io/badge/Java%20Sources-3%2C321%20Files-2ea44f?style=flat-square)](src/main/java/)
 [![Build](https://img.shields.io/badge/Build-Plain%20Gradle%20%2F%20javac-0969da?style=flat-square)](build.gradle)
 
-<!-- Drop your screenshots into docs/images/ and uncomment the lines below:
 <br />
-<img src="docs/images/main-menu.png" alt="OpenRemix Main Menu" width="49%" />
-<img src="docs/images/clickgui.png" alt="OpenRemix ClickGUI" width="49%" />
--->
+
+<img src="docs/images/splash.png" alt="OpenRemix Launch Screen" width="49%" />
+<img src="docs/images/clickgui.jpg" alt="OpenRemix In-Game ClickGUI" width="49%" />
 
 </div>
 

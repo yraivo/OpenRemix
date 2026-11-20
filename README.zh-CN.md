@@ -11,11 +11,10 @@
 [![Sources](https://img.shields.io/badge/Java%20Sources-3%2C321%20Files-2ea44f?style=flat-square)](src/main/java/)
 [![Build](https://img.shields.io/badge/Build-Plain%20Gradle%20%2F%20javac-0969da?style=flat-square)](build.gradle)
 
-<!-- 将实机截图放入 docs/images/ 后取消下面注释即可展示：
 <br />
-<img src="docs/images/main-menu.png" alt="OpenRemix 主菜单" width="49%" />
-<img src="docs/images/clickgui.png" alt="OpenRemix ClickGUI" width="49%" />
--->
+
+<img src="docs/images/splash.png" alt="OpenRemix 启动界面" width="49%" />
+<img src="docs/images/clickgui.jpg" alt="OpenRemix 游戏内 ClickGUI" width="49%" />
 
 </div>
 
