@@ -49,26 +49,20 @@ public class CapeUtils {
         }
     }
 
-    public static BufferedImage parseCape(BufferedImage bufferedimage) {
-        byte b0 = 64;
-        int l = ReflectorMethod.f();
-        byte b1 = 32;
-        int j = bufferedimage.getWidth();
-        int k = bufferedimage.getHeight();
-        int i = l;
-
-        while (b0 < j || b1 < k) {
-            b0 *= 2;
-            b1 *= 2;
-            if (i != 0) {
-                break;
-            }
+    public static BufferedImage parseCape(BufferedImage capeImage) {
+        int width = 64;
+        int height = 32;
+        int capeWidth = capeImage.getWidth();
+        int capeHeight = capeImage.getHeight();
+        while (width < capeWidth || height < capeHeight) {
+            width = Math.multiplyExact(width, 2);
+            height = Math.multiplyExact(height, 2);
         }
 
-        BufferedImage bufferedimage1 = new BufferedImage(b0, b1, 2);
-        Graphics graphics = bufferedimage1.getGraphics();
-        graphics.drawImage(bufferedimage, 0, 0, null);
+        BufferedImage texture = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics graphics = texture.getGraphics();
+        graphics.drawImage(capeImage, 0, 0, null);
         graphics.dispose();
-        return bufferedimage1;
+        return texture;
     }
 }
