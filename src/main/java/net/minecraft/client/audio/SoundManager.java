@@ -30,6 +30,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 
 public class SoundManager {
     private Map delayedSounds;
@@ -44,7 +45,7 @@ public class SoundManager {
     private Map playingSoundPoolEntries;
 
     private List tickableSounds;
-    private boolean loaded;
+    private volatile boolean loaded;
     private final Map playingSounds = HashBiMap.create();
     private static Marker LOG_MARKER;
     private Multimap categorySounds;
@@ -381,6 +382,8 @@ public class SoundManager {
     public void updateAllSounds() {
         int l = SoundHandler.getOpaqueControlBranchValue();
         this.playTime++;
+        Set<String> playback = this.loaded && !this.playingSounds.isEmpty()
+                ? this.sndSystem.requestPlaybackSnapshot() : null;
         Iterator iterator = this.tickableSounds.iterator();
         int i = l;
 
@@ -423,12 +426,12 @@ public class SoundManager {
         }
 
         iterator = this.playingSounds.entrySet().iterator();
-
-        while (iterator.hasNext()) {
+        // An unfinished audio pass cannot tell us which sounds have stopped.
+        while (playback != null && iterator.hasNext()) {
             Entry entry = (Entry) iterator.next();
             String key = (String) entry.getKey();
             ISound value = (ISound) entry.getValue();
-            if (!this.sndSystem.playing(key)) {
+            if (!playback.contains(key)) {
                 int j = (Integer) this.playingSoundsStopTime.get(key);
                 if (j <= this.playTime) {
                     int k = value.getRepeatDelay();
@@ -513,8 +516,8 @@ public class SoundManager {
             float f10 = f4 * f5;
             float f11 = f3 * f7;
             float f12 = f4 * f7;
-            this.sndSystem.setListenerPosition((float) d0, (float) d1, (float) d2);
-            this.sndSystem.setListenerOrientation(f9, f6, f10, f11, f8, f12);
+            this.sndSystem.setListenerPose(
+                    (float) d0, (float) d1, (float) d2, f9, f6, f10, f11, f8, f12);
         }
     }
 
