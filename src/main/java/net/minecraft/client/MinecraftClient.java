@@ -285,7 +285,7 @@ public class MinecraftClient implements IPlayerUsage, IThreadListener {
     public String debug;
     private ModelManager modelManager;
     private long amU;
-    private Queue scheduledTasks;
+    private final Queue<FutureTask<?>> scheduledTasks;
     private static int debugFPS;
     public PlayerController playerController;
     public GameTimer timer = new GameTimer(20.0F);
@@ -424,15 +424,24 @@ public class MinecraftClient implements IPlayerUsage, IThreadListener {
 
     private void runFrameTasks(boolean legacyFrameFlow) {
         this.mcProfiler.startSection("scheduledExecutables");
-        synchronized (this.scheduledTasks) {
-            while (!this.scheduledTasks.isEmpty()) {
-                ((FutureTask) this.scheduledTasks.poll()).run();
-                if (legacyFrameFlow) {
-                    break;
-                }
+        try {
+            // Only process the tasks queued at the start of this frame. Producers may
+            // continue submitting work while the client thread executes this batch.
+            int taskCount;
+            synchronized (this.scheduledTasks) {
+                int queued = this.scheduledTasks.size();
+                taskCount = legacyFrameFlow ? Math.min(queued, 1) : queued;
             }
+            for (int index = 0; index < taskCount; index++) {
+                FutureTask<?> task;
+                synchronized (this.scheduledTasks) {
+                    task = this.scheduledTasks.remove();
+                }
+                task.run();
+            }
+        } finally {
+            this.mcProfiler.endSection();
         }
-        this.mcProfiler.endSection();
     }
 
     private void renderClientFrame(long tickDuration, boolean legacyFrameFlow) {
@@ -3108,7 +3117,6 @@ public class MinecraftClient implements IPlayerUsage, IThreadListener {
         Validate.notNull(callable);
         if (!this.isCallingFromMinecraftThread()) {
             ListenableFutureTask listenablefuturetask = ListenableFutureTask.create(callable);
-            Queue queue = this.scheduledTasks;
             synchronized (this.scheduledTasks) {
                 this.scheduledTasks.add(listenablefuturetask);
                 return listenablefuturetask;
