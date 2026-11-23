@@ -21,7 +21,6 @@ import remix.module.ModuleDefaults;
 import remix.module.world.ScaffoldModule;
 import remix.setting.Setting;
 
-import java.util.LinkedList;
 import java.util.List;
 
 /**
@@ -144,23 +143,13 @@ public final class SpeedModule extends ModuleBase {
                                                         - MovementUtils.getSpeedWithPotion())
                                         - frictionDecayOffset;
                     } else {
-                        LinkedList<Double> candidates = new LinkedList<>();
-                        candidates.add(
-                                this.lastHorizontalDistance - this.lastHorizontalDistance / 160.0);
-                        candidates.add(
-                                this.lastHorizontalDistance
-                                        - (this.lastHorizontalDistance
-                                                        - MovementUtils.getSpeedWithPotion())
-                                                / 33.3);
-                        candidates.add(
-                                this.lastHorizontalDistance
-                                        - (this.lastHorizontalDistance
-                                                        - MovementUtils.getSpeedWithPotion())
-                                                * 0.020000000000000018);
-                        candidates.sort(Double::compare);
-                        this.moveSpeed = candidates.get(0) - 1.0E-5;
-                        this.moveSpeed =
-                                Math.max(this.moveSpeed, MovementUtils.getSpeedWithPotion());
+                        double potionSpeed = MovementUtils.getSpeedWithPotion();
+                        this.moveSpeed = MovementUtils.minimumSpeedCandidate(
+                                this.lastHorizontalDistance - this.lastHorizontalDistance / 160.0,
+                                this.lastHorizontalDistance - (this.lastHorizontalDistance - potionSpeed) / 33.3,
+                                this.lastHorizontalDistance - (this.lastHorizontalDistance - potionSpeed) * 0.020000000000000018)
+                                - 1.0E-5;
+                        this.moveSpeed = Math.max(this.moveSpeed, potionSpeed);
                     }
                     MovementUtils.setHorizontalMotion(event, this.moveSpeed);
                     break;
@@ -209,23 +198,13 @@ public final class SpeedModule extends ModuleBase {
                                                         - MovementUtils.getSpeedWithPotion())
                                         - frictionDecayOffset;
                     } else {
-                        LinkedList<Double> candidates = new LinkedList<>();
-                        candidates.add(
-                                this.lastHorizontalDistance - this.lastHorizontalDistance / 160.0);
-                        candidates.add(
-                                this.lastHorizontalDistance
-                                        - (this.lastHorizontalDistance
-                                                        - MovementUtils.getSpeedWithPotion())
-                                                / 33.3);
-                        candidates.add(
-                                this.lastHorizontalDistance
-                                        - (this.lastHorizontalDistance
-                                                        - MovementUtils.getSpeedWithPotion())
-                                                * 0.020000000000000018);
-                        candidates.sort(Double::compare);
-                        this.moveSpeed = candidates.get(0) - 1.0E-5;
-                        this.moveSpeed =
-                                Math.max(this.moveSpeed, MovementUtils.getSpeedWithPotion());
+                        double potionSpeed = MovementUtils.getSpeedWithPotion();
+                        this.moveSpeed = MovementUtils.minimumSpeedCandidate(
+                                this.lastHorizontalDistance - this.lastHorizontalDistance / 160.0,
+                                this.lastHorizontalDistance - (this.lastHorizontalDistance - potionSpeed) / 33.3,
+                                this.lastHorizontalDistance - (this.lastHorizontalDistance - potionSpeed) * 0.020000000000000018)
+                                - 1.0E-5;
+                        this.moveSpeed = Math.max(this.moveSpeed, potionSpeed);
                     }
                     MovementUtils.setHorizontalMotion(event, this.moveSpeed);
                     break;

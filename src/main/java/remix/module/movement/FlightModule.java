@@ -41,7 +41,6 @@ import remix.module.ModuleDefaults;
 import remix.setting.Setting;
 
 import java.util.Comparator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -448,12 +447,12 @@ public final class FlightModule extends ModuleBase {
                                         - 0.66 * (this.lastHorizontalDistance - MovementUtils.getSpeedWithPotion())
                                         - 1.0E-5;
                             } else {
-                                LinkedList<Double> list = new LinkedList<>();
-                                list.add(this.lastHorizontalDistance - this.lastHorizontalDistance / 160.0);
-                                list.add(this.lastHorizontalDistance - (this.lastHorizontalDistance - MovementUtils.getSpeedWithPotion()) / 33.3);
-                                list.add(this.lastHorizontalDistance - (this.lastHorizontalDistance - MovementUtils.getSpeedWithPotion()) * 0.02);
-                                list.sort(Double::compare);
-                                this.moveSpeed = list.get(2) - 1.0E-5;
+                                double potionSpeed = MovementUtils.getSpeedWithPotion();
+                                this.moveSpeed = MovementUtils.maximumSpeedCandidate(
+                                        this.lastHorizontalDistance - this.lastHorizontalDistance / 160.0,
+                                        this.lastHorizontalDistance - (this.lastHorizontalDistance - potionSpeed) / 33.3,
+                                        this.lastHorizontalDistance - (this.lastHorizontalDistance - potionSpeed) * 0.02)
+                                        - 1.0E-5;
                             }
                         }
 

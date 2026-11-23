@@ -1637,6 +1637,9 @@ public final class EntityRenderer implements IResourceManagerReloadListener {
                 GlStateManager.matrixMode(GL11.GL_TEXTURE);
                 GlStateManager.pushMatrix();
                 GlStateManager.loadIdentity();
+                if (ClientServices.moduleManager != null) {
+                    ClientServices.moduleManager.camera.prepareMotionBlurFrame(this.theShaderGroup, System.nanoTime());
+                }
                 this.theShaderGroup.renderShaderGroup(partialTicks);
                 GlStateManager.popMatrix();
             }

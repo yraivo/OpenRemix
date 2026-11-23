@@ -26,7 +26,6 @@ import remix.module.ModuleCategory;
 import remix.module.ModuleDefaults;
 import remix.setting.Setting;
 
-import java.util.LinkedList;
 
 /** LongJump module: move/motion/packet/update events and 4 settings. */
 public final class LongJumpModule extends ModuleBase {
@@ -139,12 +138,12 @@ public final class LongJumpModule extends ModuleBase {
                                     - 0.66 * (this.lastHorizontalDistance - MovementUtils.getSpeedWithPotion())
                                     - 1.0E-5;
                         } else {
-                            LinkedList<Double> list = new LinkedList<>();
-                            list.add(this.lastHorizontalDistance - this.lastHorizontalDistance / 160.0);
-                            list.add(this.lastHorizontalDistance - (this.lastHorizontalDistance - MovementUtils.getSpeedWithPotion()) / 33.3);
-                            list.add(this.lastHorizontalDistance - (this.lastHorizontalDistance - MovementUtils.getSpeedWithPotion()) * 0.02);
-                            list.sort(Double::compare);
-                            this.moveSpeed = list.get(0) - 1.0E-5;
+                            double potionSpeed = MovementUtils.getSpeedWithPotion();
+                            this.moveSpeed = MovementUtils.minimumSpeedCandidate(
+                                    this.lastHorizontalDistance - this.lastHorizontalDistance / 160.0,
+                                    this.lastHorizontalDistance - (this.lastHorizontalDistance - potionSpeed) / 33.3,
+                                    this.lastHorizontalDistance - (this.lastHorizontalDistance - potionSpeed) * 0.02)
+                                    - 1.0E-5;
                         }
                     }
 

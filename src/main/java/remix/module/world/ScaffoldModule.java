@@ -48,7 +48,7 @@ import remix.util.movement.MovementPhysicsHelper;
 import remix.util.movement.MovementUtils;
 
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -64,7 +64,16 @@ public final class ScaffoldModule extends ModuleBase {
     private Setting sneakSetting;
     private Setting smoothnessSetting;
     private Setting keepYSetting;
-    private List<ItemSlot> availableBlockStacks;
+    private final List<ItemSlot> availableBlockStacks = new ArrayList<>(36);
+    private final List<ItemSlot> inventoryBlockStacks = new ArrayList<>(27);
+    private final ItemSlot[] slotEntries = new ItemSlot[45];
+    private static final double[] DOWN_STAIR_Y = {1.0, 0.0, -1.0};
+    private static final double[] JUMP_BOOST_Y = {0.0, -1.0, -2.0};
+    private static final double[] NORMAL_Y = {0.0, -1.0};
+    private static final double[][] SCAN_HORIZONTAL_OFFSETS = {
+        {0.0, 0.0}, {1.0, 0.0}, {0.0, 1.0}, {-1.0, 0.0}, {0.0, -1.0},
+        {1.0, 1.0}, {1.0, -1.0}, {-1.0, -1.0}, {-1.0, 1.0}
+    };
     private int serverHeldSlot;
     private Setting extendSetting;
     private float[] placementRotations;
@@ -108,7 +117,6 @@ public final class ScaffoldModule extends ModuleBase {
         this.randomizeSetting = new Setting("Randomize", this, false);
         this.safewalkSetting = new Setting("Safewalk", this, false);
         this.stopSprintSetting = new Setting("StopSprint", this, false);
-        this.availableBlockStacks = new ArrayList<>();
         this.placementRotations = new float[2];
     }
 
@@ -133,6 +141,9 @@ public final class ScaffoldModule extends ModuleBase {
             this.sendPacketWithoutEvent(new HeldItemChangePacket(this.serverHeldSlot));
         }
 
+        this.availableBlockStacks.clear();
+        this.inventoryBlockStacks.clear();
+        Arrays.fill(this.slotEntries, null);
         this.placementHit = null;
         super.onDisable();
     }
@@ -362,43 +373,30 @@ public final class ScaffoldModule extends ModuleBase {
         }
         ItemStack itemStack = minecraft.player.inventory.getStackInSlot(this.serverHeldSlot);
 
-        this.availableBlockStacks = this.collectBlockStacks(36, 44);
-        if (!this.availableBlockStacks.isEmpty()) {
-            this.availableBlockStacks.sort(
-                    Comparator.<ItemSlot>comparingDouble(slot -> -slot.itemStack.stackSize));
-        }
+        this.collectBlockStacks(36, 44, this.availableBlockStacks);
+        ItemSlot hotbarStack = this.findLargestStack(this.availableBlockStacks);
+        int preferredHotbarSlot = hotbarStack == null ? -1 : hotbarStack.slotIndex - 36;
 
         if (this.fromInventorySetting.asBoolean()) {
-            List<ItemSlot> inventoryBlocks = this.collectBlockStacks(9, 35);
-            if (!inventoryBlocks.isEmpty() && this.availableBlockStacks.isEmpty()) {
-                GuiInventory guiInventory = new GuiInventory(minecraft.player);
-                inventoryBlocks.sort(
-                        Comparator.<ItemSlot>comparingDouble(slot -> -slot.itemStack.stackSize));
-                ItemSlot bestInventorySlot = inventoryBlocks.get(0);
-                if (minecraft.player.inventory.currentItem != this.serverHeldSlot) {
-                    InventoryItemHelper.clickSlot(
-                            guiInventory, bestInventorySlot.slotIndex, this.serverHeldSlot, 2);
-                    bestInventorySlot.slotIndex = 36 + this.serverHeldSlot;
-                } else {
-                    int targetHotbarIndex = (int) this.blockSlotSetting.asDouble() - 1;
-                    InventoryItemHelper.clickSlot(
-                            guiInventory, bestInventorySlot.slotIndex, targetHotbarIndex, 2);
-                    bestInventorySlot.slotIndex = 36 + targetHotbarIndex;
-                }
+            this.collectBlockStacks(9, 35, this.inventoryBlockStacks);
+            if (hotbarStack == null && !this.inventoryBlockStacks.isEmpty()) {
+                ItemSlot inventoryStack = this.findLargestStack(this.inventoryBlockStacks);
+                preferredHotbarSlot = minecraft.player.inventory.currentItem != this.serverHeldSlot
+                        ? this.serverHeldSlot : (int) this.blockSlotSetting.asDouble() - 1;
+                InventoryItemHelper.clickSlot(new GuiInventory(minecraft.player),
+                        inventoryStack.slotIndex, preferredHotbarSlot, 2);
             }
-
-            this.availableBlockStacks.addAll(inventoryBlocks);
+            this.availableBlockStacks.addAll(this.inventoryBlockStacks);
+        } else {
+            this.inventoryBlockStacks.clear();
         }
 
         if ((itemStack == null
                         || !InventoryItemHelper.isBlock(itemStack.getItem())
                         || this.biggestStackSetting.asBoolean())
-                && !this.availableBlockStacks.isEmpty()) {
-            ItemSlot bestAvailableSlot = this.availableBlockStacks.get(0);
-            if (this.serverHeldSlot != bestAvailableSlot.slotIndex - 36) {
-                this.serverHeldSlot = bestAvailableSlot.slotIndex - 36;
-                this.sendPacketWithoutEvent(new HeldItemChangePacket(this.serverHeldSlot));
-            }
+                && preferredHotbarSlot >= 0 && preferredHotbarSlot != this.serverHeldSlot) {
+            this.serverHeldSlot = preferredHotbarSlot;
+            this.sendPacketWithoutEvent(new HeldItemChangePacket(this.serverHeldSlot));
         }
 
         if (itemStack != null && itemStack.getItem() instanceof ItemBlock) {
@@ -471,17 +469,32 @@ public final class ScaffoldModule extends ModuleBase {
         this.placementRotations = new float[] {event.getYaw(), event.getPitch()};
     }
 
-    private List<ItemSlot> collectBlockStacks(int minSlot, int maxSlot) {
-        List<ItemSlot> list = new ArrayList<>();
+    private void collectBlockStacks(int minSlot, int maxSlot, List<ItemSlot> result) {
+        result.clear();
         for (int slot = maxSlot; slot >= minSlot; slot--) {
             ItemStack stack = minecraft.player.inventoryContainer.getSlot(slot).getStack();
-            if (stack != null
-                    && stack.stackSize > 0
-                    && InventoryItemHelper.isBlock(stack.getItem())) {
-                list.add(new ItemSlot(stack, slot));
+            ItemSlot entry = this.slotEntries[slot];
+            if (stack == null || stack.stackSize <= 0 || !InventoryItemHelper.isBlock(stack.getItem())) {
+                if (entry != null) entry.itemStack = null;
+                continue;
+            }
+            if (entry == null) {
+                this.slotEntries[slot] = entry = new ItemSlot(stack, slot);
+            } else {
+                entry.itemStack = stack;
+            }
+            result.add(entry);
+        }
+    }
+
+    private ItemSlot findLargestStack(List<ItemSlot> stacks) {
+        ItemSlot largest = null;
+        for (ItemSlot entry : stacks) {
+            if (largest == null || entry.itemStack.stackSize > largest.itemStack.stackSize) {
+                largest = entry;
             }
         }
-        return list;
+        return largest;
     }
 
     private RayTraceResult findPlacementHit(Vec3 origin) {
@@ -501,31 +514,20 @@ public final class ScaffoldModule extends ModuleBase {
                 {
                     double[] yOffsets;
                     if (downStair) {
-                        yOffsets = new double[] {1.0, 0.0, -1.0};
+                        yOffsets = DOWN_STAIR_Y;
                     } else if (minecraft.player.isPotionActive(Potion.JUMP)) {
-                        yOffsets = new double[] {0.0, -1.0, -2.0};
+                        yOffsets = JUMP_BOOST_Y;
                     } else {
-                        yOffsets = new double[] {0.0, -1.0};
+                        yOffsets = NORMAL_Y;
                     }
 
                     if (!this.isReplaceablePosition(
                             new BlockPos(targetVec.addVector(0.0, -1.0, 0.0)))) {
                         targetVec = targetVec.addVector(0.0, -1.0, 0.0);
                     } else {
-                        double[][] horizontalOffsets = {
-                            {0.0, 0.0},
-                            {1.0, 0.0},
-                            {0.0, 1.0},
-                            {-1.0, 0.0},
-                            {0.0, -1.0},
-                            {1.0, 1.0},
-                            {1.0, -1.0},
-                            {-1.0, -1.0},
-                            {-1.0, 1.0}
-                        };
                         boolean found = false;
                         for (double yOff : yOffsets) {
-                            for (double[] hOff : horizontalOffsets) {
+                            for (double[] hOff : SCAN_HORIZONTAL_OFFSETS) {
                                 Vec3 candidate = targetVec.addVector(hOff[0], yOff, hOff[1]);
                                 if (!this.isReplaceablePosition(new BlockPos(candidate))) {
                                     targetVec = candidate;

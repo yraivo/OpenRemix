@@ -16,6 +16,12 @@ import remix.setting.Setting;
 
 /** Captures pre-step and target bounds and generates the selected step-offset sequence. MOTION consumes offsets across movement events; other modes send the offsets as packets and restore the timer afterwards. */
 public final class StepModule extends ModuleBase {
+    private static final double[] NO_OFFSETS = new double[0];
+    private static final double[] STEP_1_5 = {0.425, 0.753, 1.001, 1.084, 1.006};
+    private static final double[] STEP_2 = {0.425, 0.821, 0.709, 0.599, 1.022, 1.372, 1.652};
+    private static final double[] STEP_2_05 = {0.425, 0.821, 0.709, 0.599, 1.022, 1.372, 1.652, 1.869};
+    private static final double[] STEP_2_5 = {0.425, 0.821, 0.709, 0.599, 1.022, 1.372, 1.652, 1.869, 2.019, 1.907};
+    private final double[] smallStepOffsets = new double[2];
     private boolean timerRestorePending;
     private final Setting<StepMode> modeSetting = new Setting("Mode", this, StepMode.NCP);
     private BoundingBox preStepBounds;
@@ -51,7 +57,7 @@ public final class StepModule extends ModuleBase {
 
             event.setY(minecraft.player.motionY = 0.0);
             minecraft.player.setBoundingBox(this.targetStepBounds);
-            this.stepOffsets = new double[0];
+            this.stepOffsets = NO_OFFSETS;
             this.offsetIndex = 0;
         }
     }
@@ -97,30 +103,7 @@ public final class StepModule extends ModuleBase {
                         && height > 0.6
                         && height <= this.heightSetting.asDouble()
                         && !ClientServices.moduleManager.speed.isEnabled()) {
-                    double[] adouble;
-                    if (height <= 1.0625) {
-                        adouble = new double[] {height * 0.42F, height * 0.75F};
-                    } else if (height <= 1.5625) {
-                        adouble = new double[] {0.425, 0.753, 1.001, 1.084, 1.006};
-                    } else if (height < 2.0F) {
-                        adouble =
-                                new double[] {
-                                    0.425, 0.821, 0.709, 0.599, 1.022, 1.372, 1.652
-                                };
-                    } else if (height < 2.0625) {
-                        adouble =
-                                new double[] {
-                                    0.425, 0.821, 0.709, 0.599, 1.022, 1.372, 1.652, 1.869
-                                };
-                    } else if (height <= 2.5625) {
-                        adouble =
-                                new double[] {
-                                    0.425, 0.821, 0.709, 0.599, 1.022, 1.372, 1.652, 1.869,
-                                    2.019, 1.907
-                                };
-                    } else {
-                        adouble = new double[0];
-                    }
+                    double[] adouble = this.offsetsForHeight(height);
 
                     if (this.modeSetting.getValue() == StepMode.MOTION) {
                         this.targetStepBounds = minecraft.player.getEntityBoundingBox();
@@ -152,10 +135,23 @@ public final class StepModule extends ModuleBase {
         }
     }
 
+    private double[] offsetsForHeight(float height) {
+        if (height <= 1.0625) {
+            this.smallStepOffsets[0] = height * 0.42F;
+            this.smallStepOffsets[1] = height * 0.75F;
+            return this.smallStepOffsets;
+        }
+        if (height <= 1.5625) return STEP_1_5;
+        if (height < 2.0F) return STEP_2;
+        if (height < 2.0625) return STEP_2_05;
+        if (height <= 2.5625) return STEP_2_5;
+        return NO_OFFSETS;
+    }
+
     public StepModule() {
         super("Step", ModuleDefaults.ofCategory(ModuleCategory.MOVEMENT));
         this.delaySetting = new Setting("Delay", this, 0.0, 0.0, 1000.0, 50.0);
         this.timerSetting = new Setting("Timer", this, true);
-        this.stepOffsets = new double[0];
+        this.stepOffsets = NO_OFFSETS;
     }
 }

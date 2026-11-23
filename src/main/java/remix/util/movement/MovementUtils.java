@@ -113,6 +113,16 @@ public final class MovementUtils {
         moveEvent.setZ(MathHelper.cos(f) * d0);
     }
 
+    public static double minimumSpeedCandidate(double first, double second, double third) {
+        double best = Double.compare(first, second) <= 0 ? first : second;
+        return Double.compare(best, third) <= 0 ? best : third;
+    }
+
+    public static double maximumSpeedCandidate(double first, double second, double third) {
+        double best = Double.compare(first, second) >= 0 ? first : second;
+        return Double.compare(best, third) >= 0 ? best : third;
+    }
+
     public static double getBaseMoveSpeed() {
         return remix.util.movement.MovementUtils.minecraft.player.isSprinting() ? 0.2873F : 0.221F;
     }

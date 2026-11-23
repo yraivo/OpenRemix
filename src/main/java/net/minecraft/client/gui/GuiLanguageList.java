@@ -8,6 +8,8 @@ import net.minecraft.client.resources.I18n;
 import net.minecraft.client.resources.Language;
 import net.minecraft.client.settings.GameSettingsOptions;
 
+import optifine.Lang;
+
 import java.util.List;
 import java.util.Map;
 
@@ -48,10 +50,13 @@ class GuiLanguageList extends GuiSlot {
     }
 
     protected void elementClicked(int i, boolean flag, int j, int k) {
+        if (this.isSelected(i)) return;
         Language language = (Language) this.languageMap.get(this.langCodeList.get(i));
         GuiLanguage.method_fa1c1ad0737ddbeaeb72(this.ars).setCurrentLanguage(language);
         GuiLanguage.method_0e23fa9a30eb0fa24070(this.ars).language = language.getLanguageCode();
-        this.mc.refreshResources();
+        GuiLanguage.method_fa1c1ad0737ddbeaeb72(this.ars)
+                .onResourceManagerReload(this.mc.getResourceManager());
+        Lang.resourcesReloaded();
         this.ars.fontRendererObj.setUnicodeFlag(
                 GuiLanguage.method_fa1c1ad0737ddbeaeb72(this.ars).isCurrentLocaleUnicode()
                         || GuiLanguage.method_0e23fa9a30eb0fa24070(this.ars).forceUnicodeFont);

@@ -55,6 +55,8 @@ import remix.util.entity.RotationHelper;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.IdentityHashMap;
+import java.util.Map;
 
 /**
  * Selects targets and runs attack/block transitions across PRE/POST motion, input and packet
@@ -97,6 +99,9 @@ public final class AuraModule extends ModuleBase {
     private float apsNoise;
 
     private List<LivingEntity> targets;
+    private final List<LivingEntity> candidateTargets = new ArrayList<>();
+    private final List<LivingEntity> priorityTargets = new ArrayList<>();
+    private final Map<LivingEntity, Double> targetSortValues = new IdentityHashMap<>();
 
     private List<LivingEntity> visitedTargets;
 
@@ -163,7 +168,8 @@ public final class AuraModule extends ModuleBase {
     private List<LivingEntity> collectTargets(
             double range, double maxAngle, boolean excludeVisited) {
 
-        List<LivingEntity> candidates = new ArrayList<>();
+        List<LivingEntity> candidates = this.candidateTargets;
+        candidates.clear();
 
         List loadedEntities = minecraft.world.loadedEntities;
 
@@ -185,6 +191,14 @@ public final class AuraModule extends ModuleBase {
         return candidates;
     }
 
+    private boolean hasTarget(double range) {
+        for (Object object : minecraft.world.loadedEntities) {
+            if (object instanceof LivingEntity
+                    && this.isValidTarget((LivingEntity) object, range, 180.0, false)) return true;
+        }
+        return false;
+    }
+
     public void onDisable() {
 
         super.onDisable();
@@ -201,6 +215,9 @@ public final class AuraModule extends ModuleBase {
         }
 
         this.currentTarget = null;
+        this.candidateTargets.clear();
+        this.priorityTargets.clear();
+        this.targetSortValues.clear();
     }
 
     private boolean isAttackReady() {
@@ -286,8 +303,8 @@ public final class AuraModule extends ModuleBase {
                         && (!antiBot.isEnabled() || !antiBot.isBot(target))
                         && (!isPlayer || !ClientServices.friendManager.isFriend(target.getName()))
                         && (!excludeVisited || !this.visitedTargets.contains(target))
-                        && (!RaycastHelper.isSameColoredTeam(target)
-                                || !this.checkTeams.asBoolean())
+                        && (!this.checkTeams.asBoolean()
+                                || !RaycastHelper.isSameColoredTeam(target))
                         && !Objects.equals(target.getName(), player.getName())
                         && !target.getUniqueId().toString().equals(target.getName())
                         && !target.getUniqueId().equals(player.getUniqueId())
@@ -542,7 +559,7 @@ public final class AuraModule extends ModuleBase {
 
         this.rotations = new float[2];
 
-        this.targets = new ArrayList<>();
+        this.targets = this.candidateTargets;
 
         this.visitedTargets = new ArrayList<>();
     }
@@ -595,7 +612,6 @@ public final class AuraModule extends ModuleBase {
             return;
         }
 
-        List blockCandidates = this.collectTargets(this.blockRange.asDouble(), 180.0, false);
 
         double attackRangeWithOffset = this.attackRange.asDouble() + this.hitboxOffset.asDouble();
 
@@ -610,7 +626,8 @@ public final class AuraModule extends ModuleBase {
         boolean autoBlockEnabled = this.autoBlock.asBoolean();
 
         boolean canAutoBlock =
-                autoBlockEnabled && this.isHoldingSword(heldItem) && !blockCandidates.isEmpty();
+                autoBlockEnabled && this.isHoldingSword(heldItem)
+                        && this.hasTarget(this.blockRange.asDouble());
 
         if (event.getPhase() == MotionPhase.PRE) {
 
@@ -673,6 +690,8 @@ public final class AuraModule extends ModuleBase {
                 this.switchAttackCount = 0;
             }
 
+            this.priorityTargets.clear();
+            this.targetSortValues.clear();
             this.targets =
                     this.collectTargets(
                             attackRangeWithOffset,
@@ -690,7 +709,7 @@ public final class AuraModule extends ModuleBase {
 
                 AuraTargetSort sortMode = (AuraTargetSort) this.targetSorting.getValue();
 
-                ArrayList<LivingEntity> priorityTargets = new ArrayList<>();
+                List<LivingEntity> priorityTargets = this.priorityTargets;
 
                 for (LivingEntity candidate : this.targets) {
 
@@ -713,9 +732,11 @@ public final class AuraModule extends ModuleBase {
                         this.targets = priorityTargets;
                     }
 
-                    this.targets.sort((livingEntity, livingEntityValue) ->
-                            sortMode.compareTargets(
-                                    livingEntity, livingEntityValue, this.rotations));
+                    for (LivingEntity candidate : this.targets) {
+                        this.targetSortValues.put(candidate, sortMode.sortValue(candidate));
+                    }
+                    this.targets.sort((first, second) -> Double.compare(
+                            this.targetSortValues.get(first), this.targetSortValues.get(second)));
 
                     if (this.attackMode.getValue() == AuraTargetMode.PRIORITY
                             || !this.isValidTarget(

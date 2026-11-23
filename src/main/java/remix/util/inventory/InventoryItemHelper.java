@@ -444,33 +444,20 @@ public final class InventoryItemHelper {
 
     public static ItemSlot findBestSlot(Object object, Comparator comparator) {
         ElapsedTimer.fM();
-
-        ItemSlot itemSlot = new ItemSlot();
-
-        ArrayList arrayList =
-                new ArrayList(
-                        remix.util.inventory.InventoryItemHelper.minecraft
-                                .player
-                                .inventoryContainer
-                                .inventorySlots);
-        Collections.reverse(arrayList);
-
-        for (java.util.Iterator<?> __recoveryIterator171_42636 = (arrayList).iterator();
-                (__recoveryIterator171_42636).hasNext(); ) {
-            Slot slot = (Slot) (__recoveryIterator171_42636).next();
-            ItemStack itemStack = slot.getStack();
-            if (itemStack != null && itemStack.getItem().getClass().equals(object)) {
-                int i = comparator.compare(itemStack, itemSlot.itemStack);
-                if (i > 0
-                        || i == 0
-                                && getEnchantmentScore(itemStack)
-                                        > getEnchantmentScore(itemSlot.itemStack)) {
-                    itemSlot = new ItemSlot(itemStack, slot.slotNumber);
-                }
+        ItemSlot best = new ItemSlot();
+        List<?> slots = minecraft.player.inventoryContainer.inventorySlots;
+        for (int index = slots.size() - 1; index >= 0; index--) {
+            Slot slot = (Slot) slots.get(index);
+            ItemStack stack = slot.getStack();
+            if (stack == null || !stack.getItem().getClass().equals(object)) continue;
+            int comparison = comparator.compare(stack, best.itemStack);
+            if (comparison > 0 || comparison == 0
+                    && getEnchantmentScore(stack) > getEnchantmentScore(best.itemStack)) {
+                best.itemStack = stack;
+                best.slotIndex = slot.slotNumber;
             }
         }
-
-        return itemSlot;
+        return best;
     }
 
     public static boolean isStackValid(ItemStack itemStack) {
@@ -573,39 +560,24 @@ public final class InventoryItemHelper {
         return -1;
     }
 
-    public static ItemSlot findBestSlotFromList(
-            Object object, Comparator comparator, java.util.List list) {
+    public static ItemSlot findBestSlotFromList(Object object, Comparator comparator, java.util.List containers) {
         ElapsedTimer.fM();
-
-        ItemSlot itemSlot = new ItemSlot();
-
-        for (java.util.Iterator<?> __recoveryIterator171_49372 = (list).iterator();
-                (__recoveryIterator171_49372).hasNext(); ) {
-            Container container = (Container) (__recoveryIterator171_49372).next();
-            Iterator iterator = container.inventorySlots.iterator();
-
-            while (true) {
-                if (iterator.hasNext()) {
-                    Slot slot = (Slot) iterator.next();
-                    ItemStack itemStack = slot.getStack();
-                    if (itemStack != null && itemStack.getItem().getClass().equals(object)) {
-                        int i = comparator.compare(itemStack, itemSlot.itemStack);
-                        if (i > 0
-                                || i == 0
-                                        && getEnchantmentScore(itemStack)
-                                                > getEnchantmentScore(itemSlot.itemStack)) {
-                            itemSlot = new ItemSlot(itemStack, slot.slotNumber);
-                        }
-                    }
-
-                    continue;
+        ItemSlot best = new ItemSlot();
+        for (Object value : containers) {
+            Container container = (Container) value;
+            for (Object entry : container.inventorySlots) {
+                Slot slot = (Slot) entry;
+                ItemStack stack = slot.getStack();
+                if (stack == null || !stack.getItem().getClass().equals(object)) continue;
+                int comparison = comparator.compare(stack, best.itemStack);
+                if (comparison > 0 || comparison == 0
+                        && getEnchantmentScore(stack) > getEnchantmentScore(best.itemStack)) {
+                    best.itemStack = stack;
+                    best.slotIndex = slot.slotNumber;
                 }
-
-                break;
             }
         }
-
-        return itemSlot;
+        return best;
     }
 
     public static boolean isMainInventoryFull() {

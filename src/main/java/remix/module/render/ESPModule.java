@@ -39,6 +39,7 @@ import remix.setting.Setting;
 import remix.util.entity.RotationHelper;
 import remix.util.math.ConvexHull2DHelper;
 import remix.util.render.Render2D3DUtils;
+import remix.util.render.ScreenProjection;
 
 import java.awt.Color;
 import java.util.ArrayList;
@@ -46,7 +47,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
+import java.util.IdentityHashMap;
+import java.util.Collections;
 
 /** ESP module: render events and 13 settings. */
 public final class ESPModule extends ModuleBase {
@@ -77,25 +79,10 @@ public final class ESPModule extends ModuleBase {
 
     public final Setting labelsSetting = new Setting("Labels", this, false);
 
-    final Map<LivingEntity, double[][]> projectedBoxVertices =
-            new TreeMap<>((firstEntity, secondEntity) -> {
-                LocalPlayer localPlayer = minecraft.player;
-
-                if (localPlayer == null) {
-
-                    return 0;
-                }
-
-                float f = localPlayer.rotationYaw;
-
-                float f1 =
-                        RotationHelper.angleDifference(f, RotationHelper.yawToEntity(firstEntity));
-
-                float f2 =
-                        RotationHelper.angleDifference(f, RotationHelper.yawToEntity(secondEntity));
-
-                return -Float.compare(f1, f2);
-            });
+    final Map<LivingEntity, double[][]> projectedBoxVertices = new IdentityHashMap<>();
+    private final Set<LivingEntity> projectedThisFrame =
+            Collections.newSetFromMap(new IdentityHashMap<LivingEntity, Boolean>());
+    private final ScreenProjection projection = new ScreenProjection();
 
     private static int borderColor;
 
@@ -110,6 +97,8 @@ public final class ESPModule extends ModuleBase {
     private Setting healthSetting;
 
     private ConvexHull2DHelper convexHullBuilder;
+    private final List<LivingEntity> drawEntities = new ArrayList<>();
+    private final Cylinder cylinder = new Cylinder();
 
     private static int unattackableEntityColor;
 
@@ -138,8 +127,11 @@ public final class ESPModule extends ModuleBase {
                     this.labelsSetting.asBoolean()
                             && !ClientServices.moduleManager.nameTags.isEnabled();
             Map<LivingEntity, double[][]> projected = this.projectedBoxVertices;
-            List<LivingEntity> entities = new ArrayList<>(projected.keySet());
-            entities.removeIf(entity -> !this.shouldRenderEntity(entity));
+            List<LivingEntity> entities = this.drawEntities;
+            entities.clear();
+            for (LivingEntity entity : projected.keySet()) {
+                if (this.shouldRenderEntity(entity)) entities.add(entity);
+            }
             entities.sort((first, second) ->
                     -Double.compare(
                             player.getDistanceToEntity(first), player.getDistanceToEntity(second)));
@@ -157,6 +149,7 @@ public final class ESPModule extends ModuleBase {
                         drawLabels);
             }
         } finally {
+            this.drawEntities.clear();
             GlStateManager.popMatrix();
         }
     }
@@ -315,73 +308,46 @@ public final class ESPModule extends ModuleBase {
     }
 
     public void updateProjectedBoxes() {
-
-        Map map = this.projectedBoxVertices;
-
-        map.clear();
-
-        List loadedEntities = minecraft.world.loadedEntities;
-
-        int i = 0;
-
-        int j = loadedEntities.size();
-
-        while (i < j) {
-
-            Entity entity = (Entity) loadedEntities.get(i);
-
-            if (entity instanceof LivingEntity) {
-
-                Vec3 vec3 = Render2D3DUtils.getInterpolatedPos(entity);
-
-                double d1 = vec3.x;
-
-                double d2 = vec3.y;
-
-                double d3 = vec3.z;
-
-                float width = entity.width;
-
-                float height = entity.height;
-
-                BoundingBox boundingBox =
-                        BoundingBox.fromBounds(
-                                d1 - width + 0.15,
-                                d2,
-                                d3 - width + 0.15,
-                                d1 + width - 0.15,
-                                d2 + height + (entity.isSneaking() ? 0.02 : 0.2),
-                                d3 + width - 0.15);
-
-                double minX = boundingBox.minX;
-
-                double minY = boundingBox.minY;
-
-                double minZ = boundingBox.minZ;
-
-                double maxX = boundingBox.maxX;
-
-                double maxY = boundingBox.maxY;
-
-                double maxZ = boundingBox.maxZ;
-
-                double[][] adouble =
-                        new double[][] {
-                            Render2D3DUtils.worldToScreen((float) minX, (float) minY, (float) minZ),
-                            Render2D3DUtils.worldToScreen((float) minX, (float) maxY, (float) minZ),
-                            Render2D3DUtils.worldToScreen((float) maxX, (float) maxY, (float) minZ),
-                            Render2D3DUtils.worldToScreen((float) maxX, (float) minY, (float) minZ),
-                            Render2D3DUtils.worldToScreen((float) maxX, (float) maxY, (float) maxZ),
-                            Render2D3DUtils.worldToScreen((float) minX, (float) maxY, (float) maxZ),
-                            Render2D3DUtils.worldToScreen((float) minX, (float) minY, (float) maxZ),
-                            Render2D3DUtils.worldToScreen((float) maxX, (float) minY, (float) maxZ)
-                        };
-
-                map.put((LivingEntity) entity, adouble);
-            }
-
-            i++;
+        if (minecraft.world == null || minecraft.player == null) {
+            this.projectedBoxVertices.clear();
+            this.projectedThisFrame.clear();
+            return;
         }
+        boolean boxes = this.isEnabled() && this.modeSetting.getValue() != ESPMode.CYLINDER;
+        NameTagsModule names = ClientServices.moduleManager.nameTags;
+        OnScreenRadarModule radar = ClientServices.moduleManager.onScreenRadar;
+        this.projectedThisFrame.clear();
+        this.projection.capture();
+        for (Object object : minecraft.world.loadedEntities) {
+            if (!(object instanceof LivingEntity)) continue;
+            LivingEntity entity = (LivingEntity) object;
+            if (!(boxes && this.shouldRenderEntity(entity))
+                    && !(names.isEnabled() && names.shouldRenderEntity(entity))
+                    && !(radar.isEnabled() && radar.shouldRenderEntity(entity))) continue;
+            Vec3 position = Render2D3DUtils.getInterpolatedPos(entity);
+            double minX = position.x - entity.width + 0.15;
+            double minY = position.y;
+            double minZ = position.z - entity.width + 0.15;
+            double maxX = position.x + entity.width - 0.15;
+            double maxY = position.y + entity.height + (entity.isSneaking() ? 0.02 : 0.2);
+            double maxZ = position.z + entity.width - 0.15;
+            double[][] points = this.projectedBoxVertices.get(entity);
+            if (points == null) points = new double[8][3];
+            boolean projected =
+                    this.projection.project(minX, minY, minZ, points[0])
+                    && this.projection.project(minX, maxY, minZ, points[1])
+                    && this.projection.project(maxX, maxY, minZ, points[2])
+                    && this.projection.project(maxX, minY, minZ, points[3])
+                    && this.projection.project(maxX, maxY, maxZ, points[4])
+                    && this.projection.project(minX, maxY, maxZ, points[5])
+                    && this.projection.project(minX, minY, maxZ, points[6])
+                    && this.projection.project(maxX, minY, maxZ, points[7]);
+            if (projected) {
+                this.projectedBoxVertices.put(entity, points);
+                this.projectedThisFrame.add(entity);
+            }
+        }
+        this.projectedBoxVertices.keySet().retainAll(this.projectedThisFrame);
     }
 
     @Subscribe(mc = Render3DEvent.class)
@@ -507,9 +473,7 @@ public final class ESPModule extends ModuleBase {
 
                         GlStateManager.translate(vec3.x, vec3.y, vec3.z);
 
-                        Cylinder cylinder = new Cylinder();
-
-                        cylinder.setDrawStyle(100013);
+                        Cylinder cylinder = this.cylinder;
 
                         GlStateManager.glLineWidth(1.0F);
 
@@ -536,6 +500,7 @@ public final class ESPModule extends ModuleBase {
 
         super("ESP", new ModuleDefaults(ModuleCategory.RENDER).visible(false));
 
+        this.cylinder.setDrawStyle(100013);
         this.borderSetting = new Setting("Border", this, true);
 
         this.healthSetting = new Setting("Health", this, true);
@@ -860,14 +825,27 @@ public final class ESPModule extends ModuleBase {
 
         ModelRenderer aus = model.bipedLeftLeg;
 
-        this.skeletonRotations.put(
-                player,
-                new float[][] {
-                    {aut.rotateAngleX, aut.rotateAngleY, aut.rotateAngleZ},
-                    {aup.rotateAngleX, aup.rotateAngleY, aup.rotateAngleZ},
-                    {auo.rotateAngleX, auo.rotateAngleY, auo.rotateAngleZ},
-                    {auq.rotateAngleX, auq.rotateAngleY, auq.rotateAngleZ},
-                    {aus.rotateAngleX, aus.rotateAngleY, aus.rotateAngleZ}
-                });
+        float[][] rotations = this.skeletonRotations.get(player);
+        if (rotations == null) {
+            rotations = new float[5][3];
+            this.skeletonRotations.put(player, rotations);
+        }
+        copyRotation(rotations[0], aut);
+        copyRotation(rotations[1], aup);
+        copyRotation(rotations[2], auo);
+        copyRotation(rotations[3], auq);
+        copyRotation(rotations[4], aus);
+    }
+    private static void copyRotation(float[] rotation, ModelRenderer model) {
+        rotation[0] = model.rotateAngleX;
+        rotation[1] = model.rotateAngleY;
+        rotation[2] = model.rotateAngleZ;
+    }
+
+    @Override
+    public void onDisable() {
+        this.drawEntities.clear();
+        this.skeletonRotations.clear();
+        super.onDisable();
     }
 }

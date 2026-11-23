@@ -2,46 +2,27 @@ package net.minecraft.inventory;
 
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
-import remix.util.task.OneShotNamedValueHolder;
 
 public class ContainerChest extends Container {
     private int numRows;
     private IInventory lowerChestInventory;
 
-    public ItemStack transferStackInSlot(PlayerEntity playerEntity, int i) {
-        int l = Container.aW();
-        ItemStack itemStack = null;
-        int j = l;
-        Slot slot = (Slot) this.inventorySlots.get(i);
-        int k = OneShotNamedValueHolder.bSR.size();
-        if (slot != null && slot.getHasStack() && k >= 8) {
-            byte b0 = 8;
-            ItemStack itemStackValue = slot.getStack();
-            itemStack = itemStackValue.copy();
-            if (i < this.numRows * (b0 + 1)) {
-                if (!this.mergeItemStack(
-                        itemStackValue,
-                        this.numRows * (b0 + 1),
-                        this.inventorySlots.size(),
-                        true)) {
-                    return null;
-                }
-            } else if (!this.mergeItemStack(
-                    itemStackValue, 0, this.numRows * (b0 + 1), false)) {
+    public ItemStack transferStackInSlot(PlayerEntity player, int index) {
+        ItemStack original = null;
+        Slot slot = this.inventorySlots.get(index);
+        if (slot != null && slot.getHasStack()) {
+            ItemStack stack = slot.getStack();
+            original = stack.copy();
+            int chestSlots = this.numRows * 9;
+            if (index < chestSlots) {
+                if (!this.mergeItemStack(stack, chestSlots, this.inventorySlots.size(), true)) return null;
+            } else if (!this.mergeItemStack(stack, 0, chestSlots, false)) {
                 return null;
             }
-
-            if (itemStackValue.stackSize == 0) {
-                slot.putStack((ItemStack) null);
-                if (j != 0) {
-                    return itemStack;
-                }
-            }
-
-            slot.onSlotChanged();
+            if (stack.stackSize == 0) slot.putStack(null);
+            else slot.onSlotChanged();
         }
-
-        return itemStack;
+        return original;
     }
 
     public void onContainerClosed(PlayerEntity playerEntity) {

@@ -6,6 +6,7 @@ import net.minecraft.client.gui.GuiChat;
 import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.entity.Entity;
 import net.minecraft.util.MathHelper;
+import net.minecraft.util.StringUtils;
 
 import remix.module.ModuleBase;
 import remix.module.ModuleManager;
@@ -16,6 +17,8 @@ import remix.ui.font.ClientFontRenderer;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.IdentityHashMap;
+import java.util.Map;
 
 public final class ArrayListHudElement implements HudElement {
     private Setting tpsSetting;
@@ -35,34 +38,54 @@ public final class ArrayListHudElement implements HudElement {
     private Setting alphaSetting;
     private Setting fpsSetting;
 
+    private final List<ModuleMetadata> visibleModules = new ArrayList<>();
+    private final Map<ModuleMetadata, RenderEntry> frameEntries = new IdentityHashMap<>();
+
+    private static final class RenderEntry {
+        final String name;
+        final String sortName;
+        final int width;
+
+        RenderEntry(String name, int width, String sortName) {
+            this.name = name;
+            this.width = width;
+            this.sortName = sortName;
+        }
+    }
+
     private List<ModuleMetadata> collectVisibleEnabledModules() {
         WatermarkHudElement.isWatermarkEnabled();
-
-        ArrayList arrayList = new ArrayList();
-
-        for (java.util.Iterator<?> __recoveryIterator171_1921 = (ModuleManager.modules).iterator();
-                (__recoveryIterator171_1921).hasNext(); ) {
-            ModuleBase moduleBase = (ModuleBase) (__recoveryIterator171_1921).next();
-            if (moduleBase.isEnabled() && moduleBase.isVisible()) {
-                arrayList.add(moduleBase);
-            }
+        this.visibleModules.clear();
+        this.frameEntries.clear();
+        boolean alphabet = this.sortingSetting.getValue() == HudSorting.ALPHABET;
+        for (ModuleBase module : ModuleManager.modules) {
+            if (!module.isEnabled() || !module.isVisible()) continue;
+            String name = module.getFormattedName();
+            this.visibleModules.add(module);
+            this.frameEntries.put(module, new RenderEntry(name,
+                    this.clientFontRenderer.getStringWidth(name),
+                    alphabet ? StringUtils.stripControlCodes(name) : name));
         }
+        return this.visibleModules;
+    }
 
-        return arrayList;
+    private int compareEntries(ModuleMetadata first, ModuleMetadata second) {
+        RenderEntry a = this.frameEntries.get(first);
+        RenderEntry b = this.frameEntries.get(second);
+        switch (this.sortingSetting.getValue()) {
+            case LENGTH: return Integer.compare(b.width, a.width);
+            case INVERSE: return Integer.compare(a.width, b.width);
+            case ALPHABET: return a.sortName.compareTo(b.sortName);
+            default:
+                return this.sortingSetting.getValue().compare(first, second,
+                        this.colorSetting.getValue(), this.clientFontRenderer);
+        }
     }
 
     public void render(ScaledResolution scaledResolution) {
         boolean flag2 = WatermarkHudElement.isWatermarkDisabled();
-        List list = this.collectVisibleEnabledModules();
-        list.sort(
-                ((java.util.Comparator<remix.module.ModuleMetadata>)
-                        ((moduleMetadata, moduleMetadataValue) ->
-                                ((HudSorting) this.sortingSetting.getValue())
-                                        .compare(
-                                                moduleMetadata,
-                                                moduleMetadataValue,
-                                                (HudColor) this.colorSetting.getValue(),
-                                                this.clientFontRenderer))));
+        List<ModuleMetadata> list = this.collectVisibleEnabledModules();
+        list.sort(this::compareEntries);
         float heightValue = this.clientFontRenderer.getHeight();
         float f1 = heightValue + 4.0F;
         float width = scaledResolution.getWidth();
@@ -177,8 +200,9 @@ public final class ArrayListHudElement implements HudElement {
                 j -= 100L;
             }
 
-            String formattedName = moduleMetadataValue2.getFormattedName();
-            float stringWidth = this.clientFontRenderer.getStringWidth(formattedName);
+            RenderEntry entry = this.frameEntries.get(moduleMetadataValue2);
+            String formattedName = entry.name;
+            float stringWidth = entry.width;
             float f7;
             float f8;
             switch (value) {
@@ -279,14 +303,10 @@ public final class ArrayListHudElement implements HudElement {
                             float f14 =
                                     b1 != 0
                                             ? 0
-                                                    + this.clientFontRenderer.getStringWidth(
-                                                            ((ModuleMetadata) list.get(l + 1))
-                                                                    .getFormattedName())
+                                                    + this.frameEntries.get(list.get(l + 1)).width
                                                     + 6
                                             : scaledResolution.getWidth()
-                                                    - this.clientFontRenderer.getStringWidth(
-                                                            ((ModuleMetadata) list.get(l + 1))
-                                                                    .getFormattedName())
+                                                    - this.frameEntries.get(list.get(l + 1)).width
                                                     - 6;
                             Gui.drawRect(f13, f4 + f1 + f9, f14, f4 + f1 + 1.0F + f9, i1);
 

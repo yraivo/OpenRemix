@@ -42,13 +42,13 @@ import remix.setting.Setting;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 
 /** AutoHeal module: motion/move/packet events and 13 settings. */
 public final class AutoHealModule extends ModuleBase {
-    private List<ItemSlot> goldenApples;
+    private final List<ItemSlot> goldenApples = new ArrayList<>();
     private Setting noTargetSetting;
     private Setting soupsSetting;
     private Setting potionsSetting;
@@ -65,7 +65,7 @@ public final class AutoHealModule extends ModuleBase {
     public boolean inventoryGrabFlag;
     private Setting healthSetting;
     private Setting jumpBoostSetting;
-    private List<ItemSlot> healingPotions;
+    private final List<ItemSlot> healingPotions = new ArrayList<>();
     private final Setting<AutoHealThrowMode> throwSetting =
             new Setting("Throw", this, AutoHealThrowMode.DOWN);
     private static String[] packedTextFragments3;
@@ -74,11 +74,11 @@ public final class AutoHealModule extends ModuleBase {
     private float[] lastRotations;
     public boolean suppressHorizontalPotionJump;
     private int previousHotbarSlot;
-    private List<ItemSlot> headItems;
-    private List<ItemSlot> soups;
-    private Comparator<ItemSlot> potionPriorityComparator;
+    private final List<ItemSlot> headItems = new ArrayList<>();
+    private final List<ItemSlot> soups = new ArrayList<>();
+    private final ItemSlot[] healingSlotEntries = new ItemSlot[45];
     public ItemSlot selectedHealingItem;
-    private List<ItemSlot> effectPotions;
+    private final List<ItemSlot> effectPotions = new ArrayList<>();
     public AutoHealUsePhase usePhase;
     private Setting effectPotionsSetting;
     private Setting predictSetting;
@@ -131,9 +131,6 @@ public final class AutoHealModule extends ModuleBase {
         this.effectPotionsSetting = new Setting("EffectPotions", this, true);
         this.gappleSetting = new Setting("Gapple", this, true);
         this.jumpBoostSetting = new Setting("JumpBoost", this, true);
-        this.potionPriorityComparator =
-                Comparator.comparingInt(
-                        itemSlot -> -this.scoreMissingPotionEffects(itemSlot.itemStack));
         this.heldSlotTimer = new ElapsedTimer();
         this.setName("Auto Heal");
     }
@@ -168,7 +165,6 @@ public final class AutoHealModule extends ModuleBase {
                     && (!this.noTargetSetting.asBoolean()
                             || ClientServices.moduleManager.aura.currentTarget == null)) {
 
-                GuiInventory guiInventory = new GuiInventory(player);
                 this.collectHealingItems();
                 double healthThreshold = this.healthSetting.asDouble();
                 double currentHealth = player.getHealth() + player.getAbsorptionAmount();
@@ -188,8 +184,7 @@ public final class AutoHealModule extends ModuleBase {
                 if (this.selectedHealingItem == null
                         && this.effectPotionsSetting.asBoolean()
                         && !this.effectPotions.isEmpty()) {
-                    this.effectPotions.sort(this.potionPriorityComparator);
-                    this.selectedHealingItem = this.effectPotions.get(0);
+                    this.selectedHealingItem = this.bestEffectPotion();
                 }
 
                 if (this.selectedHealingItem != null) {
@@ -205,7 +200,8 @@ public final class AutoHealModule extends ModuleBase {
                         }
 
                         InventoryItemHelper.clickSlot(
-                                guiInventory,
+                                currentScreen instanceof GuiInventory
+                                        ? (GuiInventory) currentScreen : new GuiInventory(player),
                                 this.selectedHealingItem.slotIndex,
                                 (int) this.slotSetting.asDouble() - 1,
                                 2);
@@ -285,7 +281,9 @@ public final class AutoHealModule extends ModuleBase {
                 }
             }
 
-            this.lastRotations = new float[] {event.getYaw(), event.getPitch()};
+            if (this.lastRotations == null) this.lastRotations = new float[2];
+            this.lastRotations[0] = event.getYaw();
+            this.lastRotations[1] = event.getPitch();
         } else if (event.getPhase() == MotionPhase.POST) {
             int currentSlot = inv.currentItem;
             if (this.selectedHealingItem != null
@@ -370,11 +368,12 @@ public final class AutoHealModule extends ModuleBase {
     }
 
     private void collectHealingItems() {
-        List<ItemSlot> healingPotionItems = this.healingPotions = new ArrayList<>();
-        List<ItemSlot> soupItems = this.soups = new ArrayList<>();
-        List<ItemSlot> headItems = this.headItems = new ArrayList<>();
-        List<ItemSlot> effectPotionItems = this.effectPotions = new ArrayList<>();
-        List<ItemSlot> goldenAppleItems = this.goldenApples = new ArrayList<>();
+        this.clearHealingCandidates();
+        List<ItemSlot> healingPotionItems = this.healingPotions;
+        List<ItemSlot> soupItems = this.soups;
+        List<ItemSlot> headItems = this.headItems;
+        List<ItemSlot> effectPotionItems = this.effectPotions;
+        List<ItemSlot> goldenAppleItems = this.goldenApples;
 
         boolean includePotions = this.potionsSetting.asBoolean();
         boolean includeSoups = this.soupsSetting.asBoolean();
@@ -392,17 +391,57 @@ public final class AutoHealModule extends ModuleBase {
 
             boolean healingSplashPotion = this.isHealingSplashPotion(itemStack);
             if (includePotions && healingSplashPotion) {
-                healingPotionItems.add(new ItemSlot(itemStack, slotIndex));
+                healingPotionItems.add(this.healingEntry(itemStack, slotIndex));
             } else if (includeSoups && this.isSoup(itemStack)) {
-                soupItems.add(new ItemSlot(itemStack, slotIndex));
+                soupItems.add(this.healingEntry(itemStack, slotIndex));
             } else if (includeHeads && this.isHeadItem(itemStack)) {
-                headItems.add(new ItemSlot(itemStack, slotIndex));
+                headItems.add(this.healingEntry(itemStack, slotIndex));
             } else if (includeEffects && this.isUsefulEffectPotion(itemStack) && !healingSplashPotion) {
-                effectPotionItems.add(new ItemSlot(itemStack, slotIndex));
+                effectPotionItems.add(this.healingEntry(itemStack, slotIndex));
             } else if (includeGoldenApples && this.isGoldenApple(itemStack)) {
-                goldenAppleItems.add(new ItemSlot(itemStack, slotIndex));
+                goldenAppleItems.add(this.healingEntry(itemStack, slotIndex));
             }
         }
+    }
+
+    private void clearHealingCandidates() {
+        this.healingPotions.clear();
+        this.soups.clear();
+        this.headItems.clear();
+        this.effectPotions.clear();
+        this.goldenApples.clear();
+    }
+
+    private ItemSlot healingEntry(ItemStack stack, int slot) {
+        ItemSlot entry = this.healingSlotEntries[slot];
+        // A selected item may have moved to a hotbar slot and remain in use across PRE/POST.
+        if (entry == null || entry == this.selectedHealingItem) {
+            this.healingSlotEntries[slot] = entry = new ItemSlot(stack, slot);
+        } else {
+            entry.itemStack = stack;
+            entry.slotIndex = slot;
+        }
+        return entry;
+    }
+
+    private ItemSlot bestEffectPotion() {
+        ItemSlot best = null;
+        int bestPriority = Integer.MAX_VALUE;
+        for (ItemSlot candidate : this.effectPotions) {
+            int priority = -this.scoreMissingPotionEffects(candidate.itemStack);
+            if (best == null || priority < bestPriority) {
+                best = candidate;
+                bestPriority = priority;
+            }
+        }
+        return best;
+    }
+
+    @Override
+    public void onDisable() {
+        this.clearHealingCandidates();
+        Arrays.fill(this.healingSlotEntries, null);
+        super.onDisable();
     }
 
     private boolean isSoup(ItemStack itemStack) {

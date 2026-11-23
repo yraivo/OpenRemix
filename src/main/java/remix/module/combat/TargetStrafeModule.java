@@ -25,6 +25,18 @@ import remix.setting.Setting;
  */
 public final class TargetStrafeModule extends ModuleBase {
 
+    private static final double[][] UNIT_RING = createUnitRing();
+
+    private static double[][] createUnitRing() {
+        double[][] points = new double[361][2];
+        float step = (float) ((Math.PI * 2) / 360.0);
+        for (int i = 0; i <= 360; i++) {
+            points[i][0] = Math.cos(i * step);
+            points[i][1] = Math.sin(i * step);
+        }
+        return points;
+    }
+
     private Setting renderSetting;
     private final Setting rangeSetting = new Setting("Range", this, 2.0, 0.5, 6.0, 0.1);
     private int strafeDirection;
@@ -41,11 +53,10 @@ public final class TargetStrafeModule extends ModuleBase {
         this.setName("Target Strafe");
     }
 
-    private Vector2d horizontalMotionForYaw(float yaw, double speed) {
+    private void horizontalMotionForYaw(float yaw, double speed, Vector2d result) {
         double yawRadians = yaw * (float) (Math.PI / 180.0);
-        double motionX = -(Math.sin(yawRadians) * speed);
-        double motionZ = Math.cos(yawRadians) * speed;
-        return new Vector2d(motionX, motionZ);
+        result.x = -(Math.sin(yawRadians) * speed);
+        result.y = Math.cos(yawRadians) * speed;
     }
 
     @Subscribe(mc = MoveEvent.class, priority = SubscriberPriority.HIGH)
@@ -84,6 +95,7 @@ public final class TargetStrafeModule extends ModuleBase {
             }
         }
 
+        Vector2d motion = new Vector2d();
         int searchSteps = 0;
         while (searchSteps < 180 && MathHelper.sqrt(relX * relX + relZ * relZ) < speed) {
             double angleRad = (angleToTarget + 90.0F) * Math.PI / 180.0;
@@ -92,7 +104,7 @@ public final class TargetStrafeModule extends ModuleBase {
             relX = orbitX + this.target.posX - minecraft.player.posX;
             relZ = orbitZ + this.target.posZ - minecraft.player.posZ;
             float moveYaw = (float) (Math.atan2(relZ, relX) * 180.0 / Math.PI) - 90.0F;
-            Vector2d motion = this.horizontalMotionForYaw(moveYaw, speed);
+            this.horizontalMotionForYaw(moveYaw, speed, motion);
 
             boolean collides =
                     !minecraft
@@ -126,7 +138,7 @@ public final class TargetStrafeModule extends ModuleBase {
         }
 
         float finalYaw = (float) (Math.atan2(relZ, relX) * 180.0 / Math.PI) - 90.0F;
-        Vector2d finalMotion = this.horizontalMotionForYaw(finalYaw, speed);
+        this.horizontalMotionForYaw(finalYaw, speed, motion);
         boolean emptyBelow =
                 minecraft
                         .world
@@ -136,8 +148,8 @@ public final class TargetStrafeModule extends ModuleBase {
                                         .player
                                         .getEntityBoundingBox()
                                         .offsetBounds(
-                                                finalMotion.x, -8.0, finalMotion.y,
-                                                finalMotion.x, 0.0, finalMotion.y))
+                                                motion.x, -8.0, motion.y,
+                                                motion.x, 0.0, motion.y))
                         .isEmpty();
         if (emptyBelow) {
             finalYaw -= 180.0F;
@@ -171,16 +183,14 @@ public final class TargetStrafeModule extends ModuleBase {
                 -minecraft.getRenderManager().getRenderPosZ());
         GlStateManager.glLineWidth(1.0F);
         GlStateManager.ab(3);
-        double segments = 360.0;
         double radius = this.rangeSetting.asDouble();
-        float angleStep = (float) ((Math.PI * 2) / segments);
         Vec3 interpolatedPos =
                 MovementPhysicsHelper.interpolateEntityPosition(
                         this.target, minecraft.timer.renderPartialTicks);
 
-        for (int i = 0; i <= (int) segments; i++) {
-            double circleX = Math.cos(i * angleStep) * radius;
-            double circleZ = Math.sin(i * angleStep) * radius;
+        for (int i = 0; i < UNIT_RING.length; i++) {
+            double circleX = UNIT_RING[i][0] * radius;
+            double circleZ = UNIT_RING[i][1] * radius;
             GlStateManager.vertex3d(
                     interpolatedPos.x + circleX,
                     interpolatedPos.y,

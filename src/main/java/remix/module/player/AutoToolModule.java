@@ -179,7 +179,7 @@ public final class AutoToolModule extends ModuleBase {
                                                     InvManagerModule.weaponComparator);
                                 }
 
-                                if (this.selectedTool.itemStack == null) {
+                                if (this.selectedTool == null || this.selectedTool.itemStack == null) {
 
                                     this.selectedTool =
                                             InventoryItemHelper.findBestWeaponSlot(j, b0, entity);
@@ -198,7 +198,8 @@ public final class AutoToolModule extends ModuleBase {
     @Subscribe(mc = PlayerUpdateEvent.class)
     public void onPlayerUpdate(PlayerUpdateEvent event) {
 
-        if (minecraft.playerController.getIsHittingBlock()) {
+        boolean hittingBlock = minecraft.playerController.getIsHittingBlock();
+        if (hittingBlock) {
 
             this.timer.reset();
         }
@@ -206,7 +207,7 @@ public final class AutoToolModule extends ModuleBase {
         FuckerModule fucker = ClientServices.moduleManager.fucker;
 
         int i =
-                !minecraft.playerController.getIsHittingBlock()
+                !hittingBlock
                                 && (!fucker.isEnabled() || fucker.targetBlock == null)
                         ? 0
                         : 1;

@@ -324,104 +324,119 @@ public class ClientFontRenderer extends GlyphAtlasFont {
         x *= 2.0;
         y = (y - 3.0) * 2.0;
 
+        boolean depthTest = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+        boolean depthWrite = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
+        boolean batchOpen = false;
         GL11.glPushMatrix();
-        GlStateManager.scale(0.5, 0.5, 0.5);
-        GlStateManager.enableBlend();
-        GlStateManager.blendFunc(770, 771);
-        applyTextColor(color, alpha);
-        GlStateManager.enableTexture2D();
-        GlStateManager.bindTexture(this.texture.getGlTextureId());
-        GlStateManager.clear(256);
-        GL11.glBindTexture(3553, this.texture.getGlTextureId());
+        try {
+            // Temporarily override raw depth state and restore it without changing the managed cache.
+            GL11.glDisable(GL11.GL_DEPTH_TEST);
+            GL11.glDepthMask(false);
+            GlStateManager.scale(0.5, 0.5, 0.5);
+            GlStateManager.enableBlend();
+            GlStateManager.blendFunc(770, 771);
+            applyTextColor(color, alpha);
+            GlStateManager.enableTexture2D();
+            GlStateManager.bindTexture(this.texture.getGlTextureId());
 
-        for (int index = 0; index < text.length(); index++) {
-            char character = text.charAt(index);
-            if (character == '\u00a7') {
-                int format = 21;
-                try {
-                    format = this.allowedCharacters.indexOf(text.charAt(index + 1));
-                } catch (Exception failure) {
-                    failure.printStackTrace();
-                }
+            for (int index = 0; index < text.length(); index++) {
+                char character = text.charAt(index);
+                if (character == '\u00a7') {
+                    if (batchOpen) {
+                        GL11.glEnd();
+                        batchOpen = false;
+                    }
+                    int format = index + 1 < text.length()
+                            ? this.allowedCharacters.indexOf(text.charAt(index + 1)) : 21;
 
-                if (format < 16) {
-                    bold = italic = strikethrough = underline = false;
-                    GlStateManager.bindTexture(this.texture.getGlTextureId());
-                    activeGlyphs = this.glyphs;
-                    int paletteIndex = (format < 0 ? 15 : format) + (shadow ? 16 : 0);
-                    applyTextColor(this.colorCodes[paletteIndex], alpha);
-                } else {
-                    switch (format) {
-                        case 17:
-                            bold = true;
-                            if (italic) {
-                                GlStateManager.bindTexture(this.boldItalicTexture.getGlTextureId());
-                                activeGlyphs = this.boldItalicGlyphs;
-                            }
-                            if (!italic || legacyFirstCharacter) {
-                                GlStateManager.bindTexture(this.boldTexture.getGlTextureId());
-                                activeGlyphs = this.boldGlyphs;
-                            }
-                            break;
-                        case 18:
-                            strikethrough = true;
-                            break;
-                        case 19:
-                            underline = true;
-                            break;
-                        case 20:
-                            italic = true;
-                            if (bold) {
-                                GlStateManager.bindTexture(this.boldItalicTexture.getGlTextureId());
-                                activeGlyphs = this.boldItalicGlyphs;
-                            }
-                            if (!bold || legacyFirstCharacter) {
-                                GlStateManager.bindTexture(this.italicTexture.getGlTextureId());
-                                activeGlyphs = this.italicGlyphs;
-                            }
-                            break;
-                        case 21:
-                            bold = italic = strikethrough = underline = false;
-                            applyTextColor(color, alpha);
-                            GlStateManager.bindTexture(this.texture.getGlTextureId());
-                            activeGlyphs = this.glyphs;
-                            break;
-                        default:
-                            // Obfuscated-text formatting (16) was never drawn specially here.
-                            break;
+                    if (format < 16) {
+                        bold = italic = strikethrough = underline = false;
+                        GlStateManager.bindTexture(this.texture.getGlTextureId());
+                        activeGlyphs = this.glyphs;
+                        int paletteIndex = (format < 0 ? 15 : format) + (shadow ? 16 : 0);
+                        applyTextColor(this.colorCodes[paletteIndex], alpha);
+                    } else {
+                        switch (format) {
+                            case 17:
+                                bold = true;
+                                if (italic) {
+                                    GlStateManager.bindTexture(this.boldItalicTexture.getGlTextureId());
+                                    activeGlyphs = this.boldItalicGlyphs;
+                                }
+                                if (!italic || legacyFirstCharacter) {
+                                    GlStateManager.bindTexture(this.boldTexture.getGlTextureId());
+                                    activeGlyphs = this.boldGlyphs;
+                                }
+                                break;
+                            case 18:
+                                strikethrough = true;
+                                break;
+                            case 19:
+                                underline = true;
+                                break;
+                            case 20:
+                                italic = true;
+                                if (bold) {
+                                    GlStateManager.bindTexture(this.boldItalicTexture.getGlTextureId());
+                                    activeGlyphs = this.boldItalicGlyphs;
+                                }
+                                if (!bold || legacyFirstCharacter) {
+                                    GlStateManager.bindTexture(this.italicTexture.getGlTextureId());
+                                    activeGlyphs = this.italicGlyphs;
+                                }
+                                break;
+                            case 21:
+                                bold = italic = strikethrough = underline = false;
+                                applyTextColor(color, alpha);
+                                GlStateManager.bindTexture(this.texture.getGlTextureId());
+                                activeGlyphs = this.glyphs;
+                                break;
+                            default:
+                                // Obfuscated-text formatting (16) was never drawn specially here.
+                                break;
+                        }
+                    }
+
+                    index++;
+                    if (!legacyFirstCharacter) {
+                        continue;
                     }
                 }
 
-                index++;
-                if (!legacyFirstCharacter) {
-                    continue;
+                if (character < activeGlyphs.length) {
+                    if (!batchOpen) {
+                        GL11.glBegin(GL11.GL_TRIANGLES);
+                        batchOpen = true;
+                    }
+                    this.drawGlyph(activeGlyphs, character, (float) x, (float) y);
+                    if (strikethrough || underline) {
+                        GL11.glEnd();
+                        batchOpen = false;
+                    }
+                    GlyphMetrics glyph = activeGlyphs[character];
+                    if (strikethrough) {
+                        double lineY = y + glyph.height / 2;
+                        this.drawTextDecorationLine(x, lineY, x + glyph.width - 8.0, lineY, 1.0F);
+                    }
+                    if (underline) {
+                        double lineY = y + glyph.height - 2.0;
+                        this.drawTextDecorationLine(x, lineY, x + glyph.width - 8.0, lineY, 1.0F);
+                    }
+                    x += glyph.width - 8 + this.characterOffset;
+                }
+                if (legacyFirstCharacter) {
+                    break;
                 }
             }
 
-            if (character < activeGlyphs.length) {
-                GL11.glBegin(4);
-                this.drawGlyph(activeGlyphs, character, (float) x, (float) y);
-                GL11.glEnd();
-                GlyphMetrics glyph = activeGlyphs[character];
-                if (strikethrough) {
-                    double lineY = y + glyph.height / 2;
-                    this.drawTextDecorationLine(x, lineY, x + glyph.width - 8.0, lineY, 1.0F);
-                }
-                if (underline) {
-                    double lineY = y + glyph.height - 2.0;
-                    this.drawTextDecorationLine(x, lineY, x + glyph.width - 8.0, lineY, 1.0F);
-                }
-                x += glyph.width - 8 + this.characterOffset;
-            }
-            if (legacyFirstCharacter) {
-                break;
-            }
+            return (float) x / 2.0F;
+        } finally {
+            if (batchOpen) GL11.glEnd();
+            GL11.glDepthMask(depthWrite);
+            if (depthTest) GL11.glEnable(GL11.GL_DEPTH_TEST);
+            else GL11.glDisable(GL11.GL_DEPTH_TEST);
+            GL11.glPopMatrix();
         }
-
-        GL11.glHint(3154, 4352);
-        GL11.glHint(3155, 4352);
-        GL11.glPopMatrix();
-        return (float) x / 2.0F;
     }
 
     private static void applyTextColor(int color, float alpha) {

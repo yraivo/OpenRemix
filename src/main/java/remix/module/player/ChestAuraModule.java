@@ -62,20 +62,8 @@ public final class ChestAuraModule extends ModuleBase {
                 return;
             }
 
-            List<TileEntityChest> unopenedChests = this.collectUnopenedChests(this.rangeSetting.asDouble());
-            if (!unopenedChests.isEmpty()) {
-                unopenedChests.sort((chest1, chest2) -> {
-                    BlockPos pos1 = chest1.getPos();
-                    BlockPos pos2 = chest2.getPos();
-                    double dist1 =
-                            minecraft.player.getDistanceSq(
-                                    pos1.getX(), pos1.getY(), pos1.getZ());
-                    double dist2 =
-                            minecraft.player.getDistanceSq(
-                                    pos2.getX(), pos2.getY(), pos2.getZ());
-                    return Double.compare(dist1, dist2);
-                });
-                this.targetChest = unopenedChests.get(0);
+            this.targetChest = this.findNearestUnopenedChest(this.rangeSetting.asDouble());
+            if (this.targetChest != null) {
                 BlockPos targetPos = this.targetChest.getPos();
                 float[] rotations =
                         RotationHelper.rotationsTo(
@@ -137,20 +125,23 @@ public final class ChestAuraModule extends ModuleBase {
         this.setName("Chest Aura");
     }
 
-    private List<TileEntityChest> collectUnopenedChests(double range) {
-        List<TileEntityChest> list = Lists.newArrayList();
-        for (Object obj : minecraft.world.loadedTileEntityList) {
-            if (obj instanceof TileEntityChest) {
-                TileEntityChest chest = (TileEntityChest) obj;
-                BlockPos pos = chest.getPos();
-                if (!this.openedChests.contains(chest)
-                        && minecraft.player.getDistanceSq(pos.getX(), pos.getY(), pos.getZ())
-                                <= range * range) {
-                    list.add(chest);
-                }
+    private TileEntityChest findNearestUnopenedChest(double range) {
+        TileEntityChest closest = null;
+        double nearestDistance = Double.POSITIVE_INFINITY;
+        double rangeSquared = range * range;
+        for (Object object : minecraft.world.loadedTileEntityList) {
+            if (!(object instanceof TileEntityChest)) continue;
+            TileEntityChest chest = (TileEntityChest) object;
+            if (this.openedChests.contains(chest)) continue;
+            BlockPos position = chest.getPos();
+            double distance = minecraft.player.getDistanceSq(
+                    position.getX(), position.getY(), position.getZ());
+            if (distance <= rangeSquared && distance < nearestDistance) {
+                closest = chest;
+                nearestDistance = distance;
             }
         }
-        return list;
+        return closest;
     }
 
     @Subscribe(mc = PlayerUpdateEvent.class)

@@ -27,6 +27,8 @@ import remix.setting.Setting;
 import shadersmod.client.Shaders;
 
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 /** Camera module: render events and 20 settings. */
 public final class CameraModule extends ModuleBase {
@@ -58,7 +60,10 @@ public final class CameraModule extends ModuleBase {
     private Setting leanSetting;
     private boolean cameraLocked;
     private ShaderGroup updatedMotionBlurGroup;
-    private double updatedBlurAmount = Double.NaN;
+    private float updatedBlurRetention = Float.NaN;
+    private long previousBlurFrameNanos;
+    private ShaderUniform[] blurUniforms = new ShaderUniform[0];
+    public final Setting<Boolean> adaptiveBlurSetting = new Setting<>("AdaptiveBlur", this, true);
     public final Setting motionBlurSetting = new Setting("MotionBlur", this, false);
     public Setting drugsSetting;
     public Setting noBurnEffectSetting;
@@ -191,32 +196,42 @@ public final class CameraModule extends ModuleBase {
                 minecraft.entityRenderer.loadShader(
                         new ResourceLocation("motionblur", "motionblur"));
             }
-            this.updateMotionBlurUniforms();
             return;
         }
 
         this.stopMotionBlur();
     }
 
-    private void updateMotionBlurUniforms() {
-        ShaderGroup group = minecraft.entityRenderer.getShaderGroup();
-        if (group == null || !"motionblur:motionblur".equals(group.getShaderGroupName())) {
-            this.updatedMotionBlurGroup = null;
-            return;
-        }
-        double amount = this.blurAmountSetting.asDouble();
-        if (group == this.updatedMotionBlurGroup && amount == this.updatedBlurAmount) {
-            return;
-        }
-        float phosphor = (float) (0.7 + amount / 100.0 * 3.0 - 0.01);
-        for (Shader shader : group.getShaders()) {
-            ShaderUniform uniform = shader.getShaderManager().ar("Phosphor");
-            if (uniform != null) {
-                uniform.set(phosphor, phosphor, phosphor);
+    /** Invoked immediately before this group's render pass; independent of game Timer/tick speed. */
+    public void prepareMotionBlurFrame(ShaderGroup group, long frameNanos) {
+        if (group == null || !"motionblur:motionblur".equals(group.getShaderGroupName())) return;
+        if (group != this.updatedMotionBlurGroup) {
+            List<ShaderUniform> uniforms = new ArrayList<>();
+            for (Shader shader : group.getShaders()) {
+                ShaderUniform uniform = shader.getShaderManager().ar("Phosphor");
+                if (uniform != null) uniforms.add(uniform);
             }
+            this.blurUniforms = uniforms.toArray(new ShaderUniform[uniforms.size()]);
+            this.updatedMotionBlurGroup = group;
+            this.updatedBlurRetention = Float.NaN;
+            this.previousBlurFrameNanos = 0L;
         }
-        this.updatedMotionBlurGroup = group;
-        this.updatedBlurAmount = amount;
+        long elapsed = this.previousBlurFrameNanos == 0L ? 0L : frameNanos - this.previousBlurFrameNanos;
+        this.previousBlurFrameNanos = frameNanos;
+        float retention = this.adaptiveBlurSetting.asBoolean()
+                ? motionBlurRetention(this.blurAmountSetting.asDouble(), elapsed)
+                : motionBlurRetention(this.blurAmountSetting.asDouble(), 0L);
+        if (retention == this.updatedBlurRetention) return;
+        for (ShaderUniform uniform : this.blurUniforms) uniform.set(retention, retention, retention);
+        this.updatedBlurRetention = retention;
+    }
+
+    /** Preserve the amount's appearance at 120 FPS, and discard history after a 100 ms stall. */
+    public static float motionBlurRetention(double amount, long elapsedNanos) {
+        double retention = 0.7 + amount / 100.0 * 3.0 - 0.01;
+        if (elapsedNanos >= 100_000_000L) return 0.0F;
+        return (float) (elapsedNanos <= 0L ? retention
+                : Math.pow(retention, elapsedNanos * 120.0 / 1_000_000_000.0));
     }
 
     private void ensureMotionBlurResources() {
@@ -239,6 +254,8 @@ public final class CameraModule extends ModuleBase {
             minecraft.entityRenderer.stopUseShader();
         }
         this.updatedMotionBlurGroup = null;
-        this.updatedBlurAmount = Double.NaN;
+        this.updatedBlurRetention = Float.NaN;
+        this.previousBlurFrameNanos = 0L;
+        if (this.blurUniforms.length != 0) this.blurUniforms = new ShaderUniform[0];
     }
 }

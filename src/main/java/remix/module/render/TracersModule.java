@@ -71,71 +71,77 @@ public final class TracersModule extends ModuleBase {
     @Subscribe(mc = Render3DEvent.class)
     public void onRender3D(Render3DEvent event) {
         if (event.getPhase() == MotionPhase.POST) {
-            for (Entity entity : minecraft.world.loadedEntities) {
-                if (this.shouldRenderEntity(entity)
-                        && entity != minecraft.player
-                        && entity.getEntityId() != -420
-                        && (this.invisiblesSetting.asBoolean() || !entity.isInvisible())) {
+            boolean drawing = false;
+            Vec3 origin = null;
+            try {
+                for (Entity entity : minecraft.world.loadedEntities) {
+                    if (this.shouldRenderEntity(entity)
+                            && entity != minecraft.player
+                            && entity.getEntityId() != -420
+                            && (this.invisiblesSetting.asBoolean() || !entity.isInvisible())) {
 
-                    Render2D3DUtils.beginUnoccludedWorldOverlay();
-                    GL11.glLineWidth((float) this.lineWidthSetting.asDouble());
-                    ClientServices clientServices = (ClientServices) RemixClient.INSTANCE.getClientServices();
-                    AutoHypixelModule autoHypixel = ClientServices.moduleManager.autoHypixel;
-                    if (autoHypixel.isEnabled()
-                            && autoHypixel.bountyHunterSetting.asBoolean()
-                            && autoHypixel.hasBounty(entity)) {
-                        Color color = new Color(-662245);
-                        GlStateManager.color(
-                                color.getRed() / 255.0F,
-                                color.getGreen() / 255.0F,
-                                color.getBlue() / 255.0F,
-                                color.getAlpha() / 255.0F);
-                    } else if (TargetsClientCommand.isTarget(entity)) {
-                        Color color1 = HudColor.getRainbowColor(15000.0, 1);
-                        GlStateManager.color(
-                                color1.getRed() / 255.0F,
-                                color1.getGreen() / 255.0F,
-                                color1.getBlue() / 255.0F,
-                                color1.getAlpha() / 255.0F);
-                    } else if (ClientServices.friendManager.isFriend(entity.getName())) {
-                        GlStateManager.color(0.1F, 0.3F, 1.0F, 1.0F);
-                    } else {
-                        float distNorm =
-                                Math.min(
-                                        minecraft.player.getDistanceToEntity(entity) / 100.0F,
-                                        1.0F);
-                        GlStateManager.color(1.0F - distNorm, distNorm, 0.0F, 0.75F);
+                        if (!drawing) {
+                            origin = new Vec3(0.0, 0.0, 1.0)
+                                    .rotatePitch(-((float) Math.toRadians(minecraft.player.rotationPitch)))
+                                    .rotateYaw(-((float) Math.toRadians(minecraft.player.rotationYaw)));
+                            Render2D3DUtils.beginUnoccludedWorldOverlay();
+                            GL11.glLineWidth((float) this.lineWidthSetting.asDouble());
+                            GlStateManager.ab(GL11.GL_LINES);
+                            drawing = true;
+                        }
+                        ClientServices clientServices = (ClientServices) RemixClient.INSTANCE.getClientServices();
+                        AutoHypixelModule autoHypixel = ClientServices.moduleManager.autoHypixel;
+                        if (autoHypixel.isEnabled()
+                                && autoHypixel.bountyHunterSetting.asBoolean()
+                                && autoHypixel.hasBounty(entity)) {
+                            Color color = new Color(-662245);
+                            GlStateManager.color(
+                                    color.getRed() / 255.0F,
+                                    color.getGreen() / 255.0F,
+                                    color.getBlue() / 255.0F,
+                                    color.getAlpha() / 255.0F);
+                        } else if (TargetsClientCommand.isTarget(entity)) {
+                            Color color1 = HudColor.getRainbowColor(15000.0, 1);
+                            GlStateManager.color(
+                                    color1.getRed() / 255.0F,
+                                    color1.getGreen() / 255.0F,
+                                    color1.getBlue() / 255.0F,
+                                    color1.getAlpha() / 255.0F);
+                        } else if (ClientServices.friendManager.isFriend(entity.getName())) {
+                            GlStateManager.color(0.1F, 0.3F, 1.0F, 1.0F);
+                        } else {
+                            float distNorm =
+                                    Math.min(
+                                            minecraft.player.getDistanceToEntity(entity) / 100.0F,
+                                            1.0F);
+                            GlStateManager.color(1.0F - distNorm, distNorm, 0.0F, 0.75F);
+                        }
+
+                        double d3 =
+                                entity.lastTickPosX
+                                        + (entity.posX - entity.lastTickPosX)
+                                                * minecraft.timer.renderPartialTicks;
+                        double d4 =
+                                entity.lastTickPosY
+                                        + (entity.posY - entity.lastTickPosY)
+                                                * minecraft.timer.renderPartialTicks;
+                        double d5 =
+                                entity.lastTickPosZ
+                                        + (entity.posZ - entity.lastTickPosZ)
+                                                * minecraft.timer.renderPartialTicks;
+                        double d0 = d3 - minecraft.getRenderManager().getRenderPosX();
+                        double d1 = d4 - minecraft.getRenderManager().getRenderPosY();
+                        double d2 = d5 - minecraft.getRenderManager().getRenderPosZ();
+                        GlStateManager.vertex3d(
+                                (float) origin.x,
+                                minecraft.player.getEyeHeight() + (float) origin.y,
+                                (float) origin.z);
+                        GlStateManager.vertex3d((float) d0, (float) d1, (float) d2);
+
                     }
-
-                    double d3 =
-                            entity.lastTickPosX
-                                    + (entity.posX - entity.lastTickPosX)
-                                            * minecraft.timer.renderPartialTicks;
-                    double d4 =
-                            entity.lastTickPosY
-                                    + (entity.posY - entity.lastTickPosY)
-                                            * minecraft.timer.renderPartialTicks;
-                    double d5 =
-                            entity.lastTickPosZ
-                                    + (entity.posZ - entity.lastTickPosZ)
-                                            * minecraft.timer.renderPartialTicks;
-                    double d0 = d3 - minecraft.getRenderManager().getRenderPosX();
-                    double d1 = d4 - minecraft.getRenderManager().getRenderPosY();
-                    double d2 = d5 - minecraft.getRenderManager().getRenderPosZ();
-                    Vec3 vec3 =
-                            new Vec3(0.0, 0.0, 1.0)
-                                    .rotatePitch(
-                                            -((float)
-                                                    Math.toRadians(minecraft.player.rotationPitch)))
-                                    .rotateYaw(
-                                            -((float)
-                                                    Math.toRadians(minecraft.player.rotationYaw)));
-                    GlStateManager.ab(3);
-                    GlStateManager.vertex3d(
-                            (float) vec3.x,
-                            minecraft.player.getEyeHeight() + (float) vec3.y,
-                            (float) vec3.z);
-                    GlStateManager.vertex3d((float) d0, (float) d1, (float) d2);
+                }
+            } finally {
+                if (drawing) {
                     GlStateManager.mO();
                     Render2D3DUtils.endUnoccludedWorldOverlay();
                 }

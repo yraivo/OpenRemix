@@ -22,6 +22,7 @@ import net.minecraft.client.gui.GuiScreen;
 import remix.module.player.InvManagerMode;
 import remix.util.inventory.InventoryItemHelper;
 import remix.util.inventory.ItemSlot;
+import remix.util.inventory.EquipmentSelection;
 import remix.event.PacketDirection;
 import remix.event.impl.PacketEvent;
 import remix.event.impl.PlayerUpdateEvent;
@@ -38,6 +39,7 @@ import java.util.List;
 
 /** InvManager module: player events and 9 settings. */
 public final class InvManagerModule extends ModuleBase {
+    private final EquipmentSelection equipment = new EquipmentSelection();
     private List<Item> projectileItems;
     private Setting armorSetting;
 
@@ -66,25 +68,8 @@ public final class InvManagerModule extends ModuleBase {
         }
 
         Item item = stack.getItem();
-        List list = Arrays.asList(InventoryItemHelper.getBestArmorFromPlayerInventory());
-        ItemStack itemStack =
-                InventoryItemHelper.findBestSlot(ItemSpade.class, toolComparator).itemStack;
-        ItemStack itemStackValue =
-                InventoryItemHelper.findBestSlot(ItemPickaxe.class, toolComparator).itemStack;
-        ItemStack itemStackValue2 =
-                InventoryItemHelper.findBestSlot(ItemAxe.class, toolComparator).itemStack;
-        ItemStack itemStackValue3 =
-                InventoryItemHelper.findBestSlot(SwordItem.class, weaponComparator).itemStack;
-        ItemStack itemStackValue4 =
-                InventoryItemHelper.findBestSlot(ItemBow.class, bowComparator).itemStack;
-
-        return stack == itemStack
-                || stack == itemStackValue
-                || stack == itemStackValue2
-                || stack == itemStackValue3
-                || stack == itemStackValue4
+        return this.equipment.contains(stack)
                 || this.alwaysUsefulItems.contains(item)
-                || list.contains(stack)
                 || this.uhcSetting.asBoolean() && this.uhcItems.contains(item)
                 || this.projectilesSetting.asBoolean() && this.projectileItems.contains(item)
                 || ClientServices.moduleManager.autoMLG.isEnabled()
@@ -133,7 +118,6 @@ public final class InvManagerModule extends ModuleBase {
             LocalPlayer player = minecraft.player;
             Container container = player.inventoryContainer;
             this.actionDelayMillis = (long) this.delaySetting.asDouble();
-            GuiInventory guiInventory = inInv ? (GuiInventory) currentScreen : new GuiInventory(player);
 
             if (this.swordSetting.asBoolean()) {
                 ItemSlot itemSlot = InventoryItemHelper.findBestSlot(SwordItem.class, weaponComparator);
@@ -144,7 +128,7 @@ public final class InvManagerModule extends ModuleBase {
                         && InventoryItemHelper.getItemDamage(itemStack)
                                 > InventoryItemHelper.getItemDamage(
                                         container.getSlot(35 + (int) swordSlot).getStack())) {
-                    InventoryItemHelper.clickSlot(guiInventory, itemSlot.slotIndex, (int) swordSlot - 1, 2);
+                    InventoryItemHelper.clickSlot(this.inventoryScreen(), itemSlot.slotIndex, (int) swordSlot - 1, 2);
                     this.timer.reset();
                     return;
                 }
@@ -174,12 +158,12 @@ public final class InvManagerModule extends ModuleBase {
                     Slot currentArmorSlot = container.getSlot(5 + this.armorTypeIndex);
                     if (currentArmorSlot != null && currentArmorSlot.getHasStack()) {
                         if (InventoryItemHelper.isMainInventoryFull()) {
-                            InventoryItemHelper.clickSlot(guiInventory, 5 + this.armorTypeIndex, 1, 4);
+                            InventoryItemHelper.clickSlot(this.inventoryScreen(), 5 + this.armorTypeIndex, 1, 4);
                         } else {
-                            InventoryItemHelper.clickSlot(guiInventory, 5 + this.armorTypeIndex, 0, 1);
+                            InventoryItemHelper.clickSlot(this.inventoryScreen(), 5 + this.armorTypeIndex, 0, 1);
                         }
                     } else {
-                        InventoryItemHelper.clickSlot(guiInventory, bestArmorSlot, 0, 1);
+                        InventoryItemHelper.clickSlot(this.inventoryScreen(), bestArmorSlot, 0, 1);
                         this.armorTypeIndex++;
                     }
 
@@ -193,15 +177,25 @@ public final class InvManagerModule extends ModuleBase {
             }
 
             if (this.cleanerSetting.asBoolean()) {
-                List inventorySlots = container.inventorySlots;
-                for (int j1 = 0; j1 < inventorySlots.size(); j1++) {
-                    Slot slotValue = (Slot) inventorySlots.get(j1);
-                    ItemStack itemStackValue2 = slotValue.getStack();
-                    if (itemStackValue2 != null && !this.isUsefulItem(itemStackValue2)) {
-                        InventoryItemHelper.clickSlot(guiInventory, slotValue.slotNumber, 1, 4);
-                        this.timer.reset();
-                        return;
+                boolean captured = false;
+                try {
+                    List inventorySlots = container.inventorySlots;
+                    for (int index = 0; index < inventorySlots.size(); index++) {
+                        Slot slot = (Slot) inventorySlots.get(index);
+                        ItemStack stack = slot.getStack();
+                        if (stack == null) continue;
+                        if (!captured) {
+                            this.equipment.capturePlayer(container, toolComparator, weaponComparator, bowComparator);
+                            captured = true;
+                        }
+                        if (!this.isUsefulItem(stack)) {
+                            InventoryItemHelper.clickSlot(this.inventoryScreen(), slot.slotNumber, 1, 4);
+                            this.timer.reset();
+                            return;
+                        }
                     }
+                } finally {
+                    this.equipment.clear();
                 }
             }
 
@@ -212,6 +206,11 @@ public final class InvManagerModule extends ModuleBase {
             this.actionDelayMillis = (long) Math.max(350.0, this.delaySetting.asDouble());
             this.timer.reset();
         }
+    }
+
+    private GuiInventory inventoryScreen() {
+        return minecraft.currentScreen instanceof GuiInventory
+                ? (GuiInventory) minecraft.currentScreen : new GuiInventory(minecraft.player);
     }
 
     public InvManagerModule() {

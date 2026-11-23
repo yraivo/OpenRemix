@@ -25,11 +25,12 @@ import remix.setting.Setting;
 
 import org.lwjgl.opengl.GL11;
 
-import java.awt.Color;
 import java.util.Map.Entry;
 
 /** OnScreenRadar module: render events and 10 settings. */
 public final class OnScreenRadarModule extends ModuleBase {
+    private final Vector2f direction = new Vector2f();
+    private final Vector2f up = new Vector2f(0.0F, 1.0F);
     private Setting mobsSetting;
     private Setting throughWallsSetting;
     private Setting outOfViewSetting;
@@ -108,10 +109,12 @@ public final class OnScreenRadarModule extends ModuleBase {
                 boolean outZ = (minZ <= -10.0 || minZ >= 1.0 || maxZ <= -10.0 || maxZ >= 1.0);
                 boolean outXY = (minX < 0.0 || minY < 0.0 || minX > width * 2 || minY > height * 2);
                 if (!this.outOfViewSetting.asBoolean() || outZ || outXY) {
-                    Vector2f v1 = new Vector2f((int) midX - width / 2, (int) midY - height / 2);
-                    Vector2f v2 = new Vector2f(v1.x - width / 2.0F, v1.y - height / 2.0F);
-                    Vector2f v3 = new Vector2f(0.0F, 1.0F);
-                    float angle = v2.angle(v3);
+                    Vector2f v2 = this.direction;
+                    v2.x = (int) midX - width / 2;
+                    v2.y = (int) midY - height / 2;
+                    v2.x -= width / 2.0F;
+                    v2.y -= height / 2.0F;
+                    float angle = v2.angle(this.up);
                     float f;
                     if (v2.x < 0.0F) {
                         f = (float) Math.toDegrees(angle) - 180.0F;
@@ -136,7 +139,7 @@ public final class OnScreenRadarModule extends ModuleBase {
                                     (Math.min(minecraft.player.getDistanceToEntity(key), 50.0F)
                                             / 50.0F
                                             * 255.0F);
-                    int color = hasBounty ? bountyColor : new Color(255 - distPercent, distPercent, 0).getRGB();
+                    int color = hasBounty ? bountyColor : (0xff000000 | (255 - distPercent) << 16 | distPercent << 8);
                     double size = this.sizeSetting.asDouble();
                     Render2D3DUtils.drawArrowColored(
                             -1.5, -this.radiusSetting.asDouble() - 1.5, size, true, color);

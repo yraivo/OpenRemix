@@ -81,6 +81,21 @@ public enum AuraTargetSort implements SettingOption {
         return (Integer) this.QX.a(livingEntity, livingEntityValue, afloat);
     }
 
+    /** Compute the original comparator's scalar once for a selection pass. */
+    public double sortValue(LivingEntity target) {
+        switch (this) {
+            case ANGLE: return RotationHelper.yawToEntity(target);
+            case DISTANCE: return target.getDistanceToEntity(MinecraftClient.getMinecraft().player);
+            case HEALTH: return target.getHealth();
+            case SMART:
+                float damage = InventoryItemHelper.getDamageVsLiving(
+                        target, MinecraftClient.getMinecraft().player.getHeldItem());
+                return target.getHealth() - damage;
+            case HURTTIME: return target.hurtTime;
+            default: throw new AssertionError(this);
+        }
+    }
+
     public String getDisplayName() {
         return this.displayName;
     }

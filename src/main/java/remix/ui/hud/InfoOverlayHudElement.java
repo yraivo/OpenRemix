@@ -136,29 +136,22 @@ public final class InfoOverlayHudElement implements HudElement {
     }
 
     private String formatWorldStatusLine() {
-        LocalPlayer player = ec.player;
-        int i = MathHelper.floor(player.posX);
-        int j = MathHelper.floor(player.posY);
-        int k = MathHelper.floor(player.posZ);
-        String text =
-                this.coordinatesSetting.asBoolean()
-                        ? String.format("XYZ: \u00a77 %s, %s, %s  ", i, j, k)
-                        : packedTextFragments[0];
-        String textValue =
-                this.fpsSetting.asBoolean()
-                        ? String.format(
-                                "\u00a7fFPS: \u00a77 %s  ", ec.debug.split(packedTextFragments[1])[0])
-                        : packedTextFragments[2];
-
-        double d0 = this.timeUpdateIntervalMillis <= 0L ? 1.0 : this.timeUpdateIntervalMillis;
-        long i1 = Math.round(20.0 * d0 / 1000.0);
-
-        long l = Math.min(i1, 20L);
-        String textValue2 =
-                this.tpsSetting.asBoolean()
-                        ? String.format("\u00a7fTPS: \u00a77 %s", l)
-                        : packedTextFragments[3];
-        return text + textValue + textValue2;
+        StringBuilder text = new StringBuilder(64);
+        if (this.coordinatesSetting.asBoolean()) {
+            LocalPlayer player = ec.player;
+            text.append("XYZ: \u00a77 ").append(MathHelper.floor(player.posX)).append(", ")
+                    .append(MathHelper.floor(player.posY)).append(", ")
+                    .append(MathHelper.floor(player.posZ)).append("  ");
+        }
+        if (this.fpsSetting.asBoolean()) {
+            text.append("\u00a7fFPS: \u00a77 ").append(net.minecraft.client.MinecraftClient.getDebugFPS()).append("  ");
+        }
+        if (this.tpsSetting.asBoolean()) {
+            double interval = this.timeUpdateIntervalMillis <= 0L ? 1.0 : this.timeUpdateIntervalMillis;
+            long tps = Math.min(Math.round(20.0 * interval / 1000.0), 20L);
+            text.append("\u00a7fTPS: \u00a77 ").append(tps);
+        }
+        return text.toString();
     }
 
     public void renderArmorStatus(ScaledResolution scaledResolution) {
