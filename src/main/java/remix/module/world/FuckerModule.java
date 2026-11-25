@@ -2,6 +2,7 @@ package remix.module.world;
 
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockBed;
+import net.minecraft.block.BlockBedEnumPartType;
 import net.minecraft.block.BlockDirectional;
 import net.minecraft.block.properties.PropertyEnum;
 import net.minecraft.block.state.BlockState;
@@ -87,8 +88,14 @@ public final class FuckerModule extends ModuleBase {
     public void onMotion(MotionEvent event) {
         LocalPlayer player = minecraft.player;
         ClientWorld world = minecraft.world;
+        PlayerController playerController = minecraft.playerController;
+        if (player == null || world == null || playerController == null) {
+            this.clearTarget();
+            return;
+        }
 
         if (event.getPhase() == MotionPhase.PRE) {
+            this.breakingObstruction = false;
             double range = (int) this.rangeSetting.asDouble();
             if (this.targetBlock != null) {
                 Block block = world.getBlockState(this.targetBlock).getBlock();
@@ -141,9 +148,10 @@ public final class FuckerModule extends ModuleBase {
                 BlockPos targetBlockValue2;
                 BlockState blockStateValue = minecraft.world.getBlockState(this.targetBlock);
                 if (blockStateValue.getBlock() instanceof BlockBed) {
-                    BlockPos blockPosValue = this.targetBlock.offset(
-                            ((Facing) blockStateValue.getValue(BlockDirectional.AGE)).getOpposite());
-                    targetBlockValue2 = this.findBreakableObstruction(this.targetBlock, blockPosValue);
+                    Facing facing = (Facing) blockStateValue.getValue(BlockDirectional.AGE);
+                    boolean head = blockStateValue.getValue(BlockBed.PART_PROP) == BlockBedEnumPartType.HEAD;
+                    BlockPos otherHalf = this.targetBlock.offset(head ? facing.getOpposite() : facing);
+                    targetBlockValue2 = this.findBreakableObstruction(this.targetBlock, otherHalf);
                 } else {
                     targetBlockValue2 = this.findBreakableObstruction(this.targetBlock);
                 }
@@ -174,17 +182,16 @@ public final class FuckerModule extends ModuleBase {
             BlockPos targetBlockValue3 = this.targetBlock;
             if (targetBlockValue3 != null) {
                 boolean interacted = false;
-                FuckerMode fucker = (FuckerMode) this.fuckerSetting.getValue();
-                PlayerController playerController = minecraft.playerController;
+                FuckerMode mode = this.modeSetting.getValue();
 
-                if (fucker == FuckerMode.BREAK || this.breakingObstruction) {
+                if (mode == FuckerMode.BREAK || this.breakingObstruction) {
                     CivBreakModule civBreak = ClientServices.moduleManager.civBreak;
                     if (civBreak.isEnabled()) {
                         civBreak.targetBlock = targetBlockValue3;
                     }
                     interacted = playerController.onPlayerDamageBlock(targetBlockValue3, Facing.UP);
                     this.breakingObstruction = false;
-                } else if (fucker == FuckerMode.USE) {
+                } else if (mode == FuckerMode.USE) {
                     interacted = playerController.onPlayerRightClick(
                             player,
                             world,
@@ -204,8 +211,20 @@ public final class FuckerModule extends ModuleBase {
         }
     }
 
+    @Override
+    public void onDisable() {
+        this.clearTarget();
+        super.onDisable();
+    }
+
+    private void clearTarget() {
+        this.targetBlock = null;
+        this.breakingObstruction = false;
+    }
+
+    @Override
     public String getSuffix() {
-        return ((FuckerMode) this.fuckerSetting.getValue()).getDisplayName();
+        return this.modeSetting.getValue().getDisplayName();
     }
 
     private boolean isEnabledTargetBlock(Block block) {

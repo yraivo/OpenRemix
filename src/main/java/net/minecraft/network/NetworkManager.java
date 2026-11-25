@@ -56,7 +56,7 @@ public class NetworkManager extends SimpleChannelInboundHandler {
     private boolean disconnected;
     private EnumPacketDirection direction;
     public static Marker logMarkerNetwork;
-    private Channel channel;
+    private volatile Channel channel;
     private static String[] packedTextFragments;
     public static LazyLoadBase CLIENT_EPOLL_EVENTLOOP;
     private PacketHandler packetHandler;
@@ -113,18 +113,25 @@ public class NetworkManager extends SimpleChannelInboundHandler {
     }
 
     public void processReceivedPackets() {
+        Channel activeChannel = this.channel;
+        if (activeChannel == null) {
+            // The connect future can complete before Netty fires channelActive.
+            return;
+        }
+
         this.flushOutboundQueue();
         if (this.packetHandler instanceof IUpdatePlayerListBox) {
             ((IUpdatePlayerListBox) this.packetHandler).update();
         }
 
-        this.channel.flush();
+        activeChannel.flush();
     }
 
     public void channelActive(ChannelHandlerContext channelhandlercontext) throws Exception {
         super.channelActive(channelhandlercontext);
-        this.channel = channelhandlercontext.channel();
-        this.remoteAddress = this.channel.remoteAddress();
+        Channel activeChannel = channelhandlercontext.channel();
+        this.remoteAddress = activeChannel.remoteAddress();
+        this.channel = activeChannel;
 
         try {
             this.setConnectionState(ConnectionState.HANDSHAKING);
